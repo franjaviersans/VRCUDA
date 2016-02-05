@@ -1,8 +1,102 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+#include "cuda_texture_types.h"
+#include "cudaGL.h"
+#include "math_functions.h"
+#include "math_functions.hpp"
 
 #include <stdio.h>
+
+#define opacityThreshold 0.99
+
+
+texture<float, cudaTextureType3D, cudaReadModeNormalizedFloat>	volume;         // 3D texture
+texture<float4, cudaTextureType1D, cudaReadModeNormalizedFloat>	transferFunction; // 1D transfer function texture
+
+
+typedef struct
+{
+	float4 m[4];
+} float4x4;
+
+__constant__ float4x4 c_invViewMatrix;  // inverse view matrix
+
+
+
+
+__global__ void volumeRenderingKernel(const int width, const int height, float3 * firsHit, float3 * lastHit, float3 * result, const float h){
+	
+	float2 Pos;
+
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+	unsigned int tpos = y * width + x;
+	float u, v;
+
+	if (x < width && y < height){
+		Pos.y = height - Pos.y;
+
+		float3 last = firsHit[tpos];
+		float3 first = lastHit[tpos];
+
+		//Get direction of the ray
+		float3 direction;
+		direction.x = last.x - first.x;
+		direction.y = last.y - first.y;
+		direction.z = last.z - first.z;
+		float D = length(direction);
+		direction = normalize(direction);
+
+		float4 color = float4(0.0f);
+		color.w = 1.0f;
+
+		float4 trans;
+		trans.x = first.x;
+		trans.y = first.y;
+		trans.z = first.z;
+		trans.w = 0.0f;
+		float4 rayStep = direction * h;
+
+		for (float t = 0; t <= D; t += h){
+
+			//Sample in the scalar field and the transfer function
+			//Need to do tri-linear interpolation here
+			float scalar = tex3D(volume, trans);
+			float4 samp = tex1D(transferFunction, scalar);
+
+			//Calculating alpa
+			samp.w = 1.0f - expf(-0.5 * samp.w);
+
+			//Acumulating color and alpha using under operator 
+			samp.x = samp.x * samp.w;
+			samp.y = samp.y * samp.w;
+			samp.z = samp.z * samp.w;
+
+			color.x += samp.x * color.w;
+			color.y += samp.y * color.w;
+			color.z += samp.z * color.w;
+			color.w *= 1.0f - samp.w;
+
+			//Do early termination of the ray
+			if (1.0f - color.w > opacityThreshold) break;
+
+			//Increment ray step
+			trans += rayStep;
+		}
+
+		color.w = 1.0f - color.w;
+		result[tpos].x = color.x;
+		result[tpos].y = color.y;
+		result[tpos].z = color.z;
+	}
+}
+
+
+
+
+
+
 
 // Launch a kernel on the GPU with one thread for each element.
 	//

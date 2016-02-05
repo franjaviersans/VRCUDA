@@ -74,4 +74,24 @@
       <Filter>Sources Files</Filter>
     </CudaCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\hit.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\hit.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\textureQuad.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\textureQuad.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\TransferFunction.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\TransferFunction.vert">
+      <Filter>Shaders</Filter>
+    </None>
+  </ItemGroup>
 </Project>

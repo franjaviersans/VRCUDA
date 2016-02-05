@@ -43,6 +43,14 @@
   <ItemGroup>
     <CudaCompile Include="src\kernel.cu" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\hit.frag" />
+    <None Include="shaders\hit.vert" />
+    <None Include="shaders\textureQuad.frag" />
+    <None Include="shaders\textureQuad.vert" />
+    <None Include="shaders\TransferFunction.frag" />
+    <None Include="shaders\TransferFunction.vert" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{1A90B6C9-EB47-417E-B716-A632F40331AC}</ProjectGuid>
     <RootNamespace>VRCUDA</RootNamespace>
