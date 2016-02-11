@@ -5,8 +5,10 @@
 #include "cudaGL.h"
 #include "math_functions.h"
 #include "math_functions.hpp"
+#include "helper_math.cu"
 
 #include <stdio.h>
+
 
 #define opacityThreshold 0.99
 
@@ -21,8 +23,6 @@ typedef struct
 } float4x4;
 
 __constant__ float4x4 c_invViewMatrix;  // inverse view matrix
-
-
 
 
 __global__ void volumeRenderingKernel(const int width, const int height, float3 * firsHit, float3 * lastHit, float3 * result, const float h){
@@ -41,22 +41,15 @@ __global__ void volumeRenderingKernel(const int width, const int height, float3 
 		float3 first = lastHit[tpos];
 
 		//Get direction of the ray
-		float3 direction;
-		direction.x = last.x - first.x;
-		direction.y = last.y - first.y;
-		direction.z = last.z - first.z;
+		float3 direction = last - first;
 		float D = length(direction);
 		direction = normalize(direction);
 
-		float4 color = float4(0.0f);
+		float4 color = make_float4(0.0f);
 		color.w = 1.0f;
 
-		float4 trans;
-		trans.x = first.x;
-		trans.y = first.y;
-		trans.z = first.z;
-		trans.w = 0.0f;
-		float4 rayStep = direction * h;
+		float3 trans = first;
+		float3 rayStep = direction * h;
 
 		for (float t = 0; t <= D; t += h){
 
@@ -86,9 +79,7 @@ __global__ void volumeRenderingKernel(const int width, const int height, float3 
 		}
 
 		color.w = 1.0f - color.w;
-		result[tpos].x = color.x;
-		result[tpos].y = color.y;
-		result[tpos].z = color.z;
+		result[tpos] = make_float3(color);
 	}
 }
 
@@ -110,7 +101,7 @@ __global__ void addKernel(int *c, const int *a, const int *b)
 void kernelwrapper(int *dev_c, const int * dev_a, const int *dev_b, unsigned int size)
 {
 
-	addKernel << < 1, size >> >(dev_c, dev_a, dev_b);
+	addKernel <<< 1, size >>>(dev_c, dev_a, dev_b);
 }
 
 

@@ -41,6 +41,7 @@
     <ClInclude Include="src\Volume.h" />
   </ItemGroup>
   <ItemGroup>
+    <CudaCompile Include="src\helper_math.cu" />
     <CudaCompile Include="src\kernel.cu" />
   </ItemGroup>
   <ItemGroup>
