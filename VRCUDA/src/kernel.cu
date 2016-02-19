@@ -1,11 +1,13 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+//
 #include "cuda_texture_types.h"
-#include "cudaGL.h"
+
 #include "math_functions.h"
 #include "math_functions.hpp"
 #include "helper_math.cu"
+//#include "cudaGL.h"
 
 #include <stdio.h>
 
@@ -55,8 +57,10 @@ __global__ void volumeRenderingKernel(const int width, const int height, float3 
 
 			//Sample in the scalar field and the transfer function
 			//Need to do tri-linear interpolation here
-			float scalar = tex3D(volume, trans);
-			float4 samp = tex1D(transferFunction, scalar);
+			float scalar = tex3D(volume, trans.x, trans.y, trans.z);
+			//float4 samp = tex1D(transferFunction, scalar);
+			//float scalar = 0.1;
+			float4 samp = make_float4(0.0f);
 
 			//Calculating alpa
 			samp.w = 1.0f - expf(-0.5 * samp.w);
