@@ -697,6 +697,9 @@ void TransferFunction::UpdateColorPoint()
 //Function to update pallete of colors
 void TransferFunction::UpdatePallete()
 {
+
+	updateTexture = true;
+
 	static float completeAreaSize = MAXW - MINW;
 	static float stepSizeBox = completeAreaSize / NUMOFCOLORS;
 	int indexOfPallete = 0;

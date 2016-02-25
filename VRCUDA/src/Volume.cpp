@@ -19,6 +19,7 @@ using namespace std;
 Volume::Volume()
 {
 	Init();
+	volume = NULL;
 }
 
 
@@ -27,6 +28,7 @@ Volume::Volume()
 */
 Volume::~Volume()
 {
+	if (volume != NULL) delete [] volume;
 }
 
 
@@ -56,8 +58,8 @@ void Volume::Load(string filename, GLuint width, GLuint height, GLuint depth)
 
     textureFile.seekg (0, textureFile.beg);
 
-	char * memtexture = new char[length];
-    textureFile.read(memtexture, length);
+	volume = new char[length];
+	textureFile.read(volume, length);
 
 	textureFile.close();
 
@@ -71,7 +73,7 @@ void Volume::Load(string filename, GLuint width, GLuint height, GLuint depth)
 	//for(int i=0; i<length; ++i) memtexture[i] = 255;
 
 	//Create Texture
-	TextureManager::Inst()->CreateTexture3D(TEXTURE_VOLUME, width, height, depth, GL_RED, GL_RED, GL_FLOAT, GL_LINEAR, GL_LINEAR, memtexture);
+	TextureManager::Inst()->CreateTexture3D(TEXTURE_VOLUME, width, height, depth, GL_RED, GL_RED, GL_FLOAT, GL_LINEAR, GL_LINEAR, volume);
 }
 
 void Volume::Use(GLenum activeTexture)
