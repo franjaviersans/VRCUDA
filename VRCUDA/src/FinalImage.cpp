@@ -79,7 +79,6 @@ void CFinalImage::Draw()
 	//Draw a Cube
 	m_program.use();
 	{
-		Use(GL_TEXTURE0);
 		FBOCube::Instance()->Draw();
 	}
 }

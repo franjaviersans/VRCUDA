@@ -39,6 +39,9 @@
     <ClCompile Include="src\Volume.cpp">
       <Filter>Sources Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\helper_math.h">
+      <Filter>Sources Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CubeIntersection.h">
@@ -68,12 +71,12 @@
     <ClInclude Include="src\Volume.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\kernel.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="src\kernel.cu">
-      <Filter>Sources Files</Filter>
-    </CudaCompile>
-    <CudaCompile Include="src\helper_math.cu">
       <Filter>Sources Files</Filter>
     </CudaCompile>
   </ItemGroup>

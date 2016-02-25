@@ -23,6 +23,8 @@ class Volume
 	public:
 
 		float m_fDiagonal, m_fWidht, m_fHeigth, m_fDepth;
+
+		char * volume;
 		
 
 		///Default constructor

@@ -1,3 +1,4 @@
+#include "kernel.cuh"
 #include "Definitions.h"
 #include "GLSLProgram.h"
 #include "TransferFunction.h"
@@ -14,9 +15,6 @@ using std::endl;
 
 
 
-extern int CUDAmain();
-
-
 namespace glfwFunc
 {
 	GLFWwindow* glfwWindow;
@@ -26,15 +24,17 @@ namespace glfwFunc
 
 	const float NCP = 0.01f;
 	const float FCP = 45.0f;
-	const float fAngle = 45.f;
+	const float fAngle = 45.f * (3.14f / 180.0f); //In radians
 
 	//Declare the transfer function
 	TransferFunction *g_pTransferFunc;
 
+	//Class to wrap cuda code
+	CUDAClass * cuda;
+
 	float color[]={1,1,1};
 	bool pintar = false;
 
-	GLSLProgram m_computeProgram;
 	glm::mat4x4 mProjMatrix, mModelViewMatrix, mMVP;
 
 	//Variables to do rotation
@@ -170,13 +170,6 @@ namespace glfwFunc
 		glViewport(0, 0, iWidth, iHeight);
 
 		mProjMatrix = glm::perspective(float(fAngle), ratio, 1.0f, 10.0f);
-	//	mProjMatrix = glm::ortho(-1.0f,1.0f,-1.0f,1.0f,-1.0f,5.0f);
-
-		m_computeProgram.use();
-		{
-			m_computeProgram.setUniform("mProjection", mProjMatrix);
-		}
-
 
 		// Update size in some buffers!!!
 		TwWindowSizeGLFW3(window, iWidth, iHeight);
@@ -184,16 +177,9 @@ namespace glfwFunc
 		m_FrontInter->SetResolution(iWidth, iHeight);
 		m_FinalImage->SetResolution(iWidth, iHeight);
 		g_pTransferFunc->Resize(&WINDOW_WIDTH, &WINDOW_HEIGHT);
-
-		m_computeProgram.use();
-		{
-			//Bind the texture
-			glBindImageTexture(0, TextureManager::Inst()->GetID(TEXTURE_FINAL_IMAGE), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
-			glBindImageTexture(1, TextureManager::Inst()->GetID(TEXTURE_BACK_HIT), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA16F);
-			glBindImageTexture(2, TextureManager::Inst()->GetID(TEXTURE_FRONT_HIT), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA16F);
-			glBindImageTexture(3, TextureManager::Inst()->GetID(TEXTURE_TRANSFER_FUNC), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
-			glBindImageTexture(4, TextureManager::Inst()->GetID(TEXTURE_VOLUME), 0, GL_TRUE, 0, GL_READ_ONLY, GL_R8);
-		}
+		
+		//Set image Size
+		cuda->cudaSetImageSize(iWidth, iHeight, NCP, fAngle/2.0f);
 		
 	}
 
@@ -215,34 +201,20 @@ namespace glfwFunc
 
 		mMVP = mProjMatrix * mModelViewMatrix;
 
-		//Obtain Back hits
+		cuda->cudaUpdateMatrix(glm::value_ptr(glm::transpose(glm::inverse(mModelViewMatrix))));
+
+		/*//Obtain Back hits
 		m_BackInter->Draw(mMVP);
 		//Obtain the front hits
-		m_FrontInter->Draw(mMVP);
+		m_FrontInter->Draw(mMVP);*/
 
-		//Draw a Cube
-		m_computeProgram.use();
-		{					
-			//Do calculation with Compute Shader
-			glDispatchCompute((WINDOW_WIDTH + 8) / 8, (WINDOW_HEIGHT + 8) / 8, 1);
 
-			//Wait for memory writes
-			glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+		//CUDA volume ray casting
+		cuda->cudaRC();
 
-			//bind the default texture to the image unit, hopefully freeing ours for editing
-			/*glBindImageTexture(0, 0, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
-			glBindImageTexture(1, 0, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA16F);
-			glBindImageTexture(2, 0, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA16F);
-			glBindImageTexture(3, 0, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
-			glBindImageTexture(4, 0, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);*/
-			
 
-			//glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
-			//glPointSize(10);
-			
-			//glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-		}
-
+		
+		
 
 		//Draw the quad with the final result
 		glClearColor(0.15f, 0.15f, 0.15f, 1.f);
@@ -251,6 +223,7 @@ namespace glfwFunc
 		//Blend with bg
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+		cuda->Use(GL_TEXTURE0); //Use the texture
 		m_FinalImage->Draw();
 		glDisable(GL_BLEND);
 
@@ -313,10 +286,14 @@ namespace glfwFunc
 		printf("Vendor: %s\n", glGetString(GL_VENDOR));
 		printf("Renderer: %s\n", glGetString(GL_RENDERER));
 
+		cuda = new CUDAClass();
+
 
 		//Init the transfer function
 		g_pTransferFunc = new TransferFunction();
 		g_pTransferFunc->InitContext(glfwWindow, &WINDOW_WIDTH, &WINDOW_HEIGHT, -1, -1);
+
+		cuda->cudaSetTransferFunction((float4 *)g_pTransferFunc->colorPalette, 256);
 
 		TwInit(TW_OPENGL_CORE, NULL);
 		TwWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -346,23 +323,10 @@ namespace glfwFunc
 		volume = new Volume();
 		volume->Load("Raw/head256.raw", 256, 256, 256);
 
-		//Set compute shader
-		try{
-			m_computeProgram.compileShader("./shaders/compute.cs", GLSLShader::COMPUTE);
-			m_computeProgram.link();
-		}
-		catch (GLSLProgramException & e) {
-			std::cerr << e.what() << std::endl;
-			exit(EXIT_FAILURE);
-		}
-		m_computeProgram.use();
-		{
-			//Set the value of h
-			m_computeProgram.setUniform("h", 1.0f / volume->m_fDiagonal);
-			m_computeProgram.setUniform("width", volume->m_fWidht);
-			m_computeProgram.setUniform("height", volume->m_fHeigth);
-			m_computeProgram.setUniform("depth", volume->m_fDepth);
-		}
+		cuda->cudaSetVolume((char1 *)volume->volume, 256, 256, 256, volume->m_fDiagonal);
+
+		
+
 
 		m_BackInter = new CCubeIntersection(false, WINDOW_WIDTH, WINDOW_HEIGHT);
 		m_FrontInter = new CCubeIntersection(true, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -387,9 +351,6 @@ namespace glfwFunc
 int main(int argc, char** argv)
 {
 
-	CUDAmain();
-
-	exit(0);
 
 	glfwSetErrorCallback(glfwFunc::errorCB);
 	if (!glfwInit())	exit(EXIT_FAILURE);
@@ -400,12 +361,12 @@ int main(int argc, char** argv)
 		exit(EXIT_FAILURE);
 	}
 
-	glfwMakeContextCurrent(glfwFunc::glfwWindow);
-	if(!glfwFunc::initialize()) exit(EXIT_FAILURE);
-	glfwFunc::resizeCB(glfwFunc::glfwWindow, glfwFunc::WINDOW_WIDTH, glfwFunc::WINDOW_HEIGHT);	//just the 1st time
 
 	
 
+	glfwMakeContextCurrent(glfwFunc::glfwWindow);
+	if(!glfwFunc::initialize()) exit(EXIT_FAILURE);
+	glfwFunc::resizeCB(glfwFunc::glfwWindow, glfwFunc::WINDOW_WIDTH, glfwFunc::WINDOW_HEIGHT);	//just the 1st time
 
 	// main loop!
 	while (!glfwWindowShouldClose(glfwFunc::glfwWindow))
@@ -413,10 +374,9 @@ int main(int argc, char** argv)
 
 		if(glfwFunc::g_pTransferFunc->updateTexture) // Check if the color palette changed    
 		{
-			glfwFunc::g_pTransferFunc->UpdatePallete();
+			//glfwFunc::g_pTransferFunc->UpdatePallete();
 			glfwFunc::g_pTransferFunc->updateTexture = false;
-			cout<<"Actualizando textura  "<<endl;
-
+			glfwFunc::cuda->cudaSetTransferFunction((float4 *)glfwFunc::g_pTransferFunc->colorPalette, 256);
 		}
 		glfwFunc::draw();
 		glfwPollEvents();	//or glfwWaitEvents()

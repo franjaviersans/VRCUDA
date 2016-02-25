@@ -36,12 +36,15 @@
     <ClInclude Include="src\FBOQuad.h" />
     <ClInclude Include="src\FinalImage.h" />
     <ClInclude Include="src\GLSLProgram.h" />
+    <ClInclude Include="src\kernel.cuh" />
     <ClInclude Include="src\TextureManager.h" />
     <ClInclude Include="src\TransferFunction.h" />
     <ClInclude Include="src\Volume.h" />
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="src\helper_math.cu" />
+    <ClCompile Include="src\helper_math.h">
+      <FileType>Document</FileType>
+    </ClCompile>
     <CudaCompile Include="src\kernel.cu" />
   </ItemGroup>
   <ItemGroup>
