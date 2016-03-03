@@ -88,8 +88,8 @@ __global__ void volumeRenderingKernel(uchar4 * result/*, const int width, const 
 
 		
 		//ok u and v between -1 and 1
-		float u = ((x / (float)constantWidth)*2.0f - 1.0f);
-		float v = ((y / (float)768.0f)*2.0f - 1.0f);
+		float u = (((x + 0.5f) / (float)constantWidth)*2.0f - 1.0f);
+		float v = (((y + 0.5f) / (float)constantHeight)*2.0f - 1.0f);
 
 
 
