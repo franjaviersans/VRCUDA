@@ -22,8 +22,8 @@ namespace glfwFunc
 	int WINDOW_HEIGHT = 768;
 	std::string strNameWindow = "CUDA Volume Ray Casting";
 
-	const float NCP = 0.01f;
-	const float FCP = 45.0f;
+	const float NCP = 1.0f;
+	const float FCP = 10.0f;
 	const float fAngle = 45.f * (3.14f / 180.0f); //In radians
 
 	//Declare the transfer function
@@ -274,7 +274,7 @@ namespace glfwFunc
 		volume = new Volume();
 		volume->Load(volume_filepath, vol_size.x, vol_size.y, vol_size.z);
 
-		cuda->cudaSetVolume((char1 *)volume->volume, vol_size.x, vol_size.y, vol_size.z, volume->m_fDiagonal);
+		cuda->cudaSetVolume(vol_size.x, vol_size.y, vol_size.z, volume->m_fDiagonal);
 
 		
 
@@ -346,9 +346,8 @@ int main(int argc, char** argv)
 
 		if(glfwFunc::g_pTransferFunc->updateTexture) // Check if the color palette changed    
 		{
-			//glfwFunc::g_pTransferFunc->UpdatePallete();
+			glfwFunc::g_pTransferFunc->UpdatePallete();
 			glfwFunc::g_pTransferFunc->updateTexture = false;
-			glfwFunc::cuda->cudaSetTransferFunction((float4 *)glfwFunc::g_pTransferFunc->colorPalette, 256);
 		}
 		glfwFunc::draw();
 		glfwPollEvents();	//or glfwWaitEvents()
