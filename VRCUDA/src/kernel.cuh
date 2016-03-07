@@ -46,17 +46,16 @@ public:
 	CUDAClass();
 	~CUDAClass();
 	int Width, Height;
-	float4 *d_lastHit, *d_FirstHit;
-	cudaArray *d_volume, *d_texture;
+	//float4 *d_lastHit, *d_FirstHit;
+	cudaArray *d_volume, *d_texture, *d_final;
 	unsigned int num_vert, num_tri;
-	GLuint pbo;     // OpenGL pixel buffer object
-	struct cudaGraphicsResource *cuda_pbo_resource; // CUDA Graphics Resource (to transfer PBO)
+	cudaGraphicsResource_t cudaResource_TF, cudaResource_volume, cudaResource_final; // CUDA Graphics Resource
 
 
 	void destroyObject();
 	void cudaUpdateMatrix(const float * matrix);
-	void cudaRC(/*, unsigned int, unsigned int, float, float4 *, float4 **/);
-	void cudaSetVolume(char1 *vol, unsigned int width, unsigned int height, unsigned int depth, float diagonal);
+	void cudaRC();
+	void cudaSetVolume(unsigned int width, unsigned int height, unsigned int depth, float diagonal);
 	void cudaSetImageSize(unsigned int width, unsigned int height, float NCP, float angle);
 	void cudaSetTransferFunction(float4 *d_transferFunction, unsigned int width = 256);
 	void Use(GLenum activeTexture);

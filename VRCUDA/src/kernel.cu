@@ -11,7 +11,8 @@ typedef unsigned char VolumeType;
 
 
 texture<VolumeType, 3, cudaReadModeNormalizedFloat> volume;         // 3D texture
-texture<float4, 1, cudaReadModeElementType>         transferFunction; // 1D transfer function texture
+texture<float4, 2, cudaReadModeElementType>         transferFunction; // 1D transfer function texture
+surface<void, cudaSurfaceType2D> surf;
 
 /*
 texture<VolumeType, cudaTextureType3D, /*cudaReadModeNormalizedFloat cudaReadModeElementType>	volume;         // 3D texture
@@ -69,10 +70,9 @@ int intersectBox(Ray r, float *tnear, float *tfar)
 /**
 Kernel to do the volume rendering 
 */
-__global__ void volumeRenderingKernel(uchar4 * result/*, const int width, const int height, float3 * firsHit, float3 * lastHit*/){
+__global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const int height, float3 * firsHit, float3 * lastHit*/){
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-	unsigned int tpos = y * constantWidth + x;
 	
 
 	if (x < constantWidth && y < constantHeight){
@@ -98,7 +98,7 @@ __global__ void volumeRenderingKernel(uchar4 * result/*, const int width, const 
 		float tangent = tan(constantAngle); // angle in radians
 		float ar = (float(constantWidth) / constantHeight);
 		eyeRay.o = multiplication(c_invViewMatrix, make_float4(0.0f, 0.0f, 0.0f, 1.0f));
-		eyeRay.d = normalize(make_float4(u * tangent * ar, v * tangent, -1.0f, 0.0f));
+		eyeRay.d = normalize(make_float4(u * tangent * ar, v * tangent, -cosntantNCP, 0.0f));
 		eyeRay.d = multiplication(c_invViewMatrix, eyeRay.d);
 		eyeRay.d = normalize(eyeRay.d);
 
@@ -110,8 +110,8 @@ __global__ void volumeRenderingKernel(uchar4 * result/*, const int width, const 
 
 		if (hit){
 
-			/*if (tnear < ncp)
-				tnear = ncp;     // clamp to near plane*/
+			if (tnear < cosntantNCP)
+				tnear = cosntantNCP;     // clamp to near plane
 
 
 			//float3 last = firsHit[tpos];
@@ -137,7 +137,7 @@ __global__ void volumeRenderingKernel(uchar4 * result/*, const int width, const 
 				//Need to do tri-linear interpolation here
 				float scalar = tex3D(volume, trans.x + 0.5f, trans.y + 0.5f, 1.0f - (trans.z + 0.5f)); //convert to texture space
 				//float scalar = tex3D(volume, trans.x, trans.y, trans.z);
-				float4 samp = tex1D(transferFunction, scalar);
+				float4 samp = tex2D(transferFunction, scalar, 0.5f);
 				//float scalar = 0.1;
 				//float4 samp = make_float4(0.0f);
 
@@ -163,13 +163,16 @@ __global__ void volumeRenderingKernel(uchar4 * result/*, const int width, const 
 
 			color.w = 1.0f - color.w;
 
-			//color = bg * color.w + color * (1.0f - color.w);
-			
-			result[tpos] = make_uchar4(color.x * 255, color.y * 255, color.z * 255, color.w * 255);
+			//Write to the texture
+			uchar4 ucolor = make_uchar4(color.x * 255, color.y * 255, color.z * 255, color.w * 255);
+			surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp); 
 
 		}else{
 			bg.w = 1.0f;
-			result[tpos] = make_uchar4(bg.x * 255, bg.y * 255, bg.z * 255, bg.w * 255);
+
+			//Write to the texture
+			uchar4 ucolor = make_uchar4(bg.x * 255, bg.y * 255, bg.z * 255, bg.w * 255);
+			surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp);
 		}
 		
 	}
@@ -182,11 +185,11 @@ CUDAClass::CUDAClass()
 {
 	d_lastHit = d_FirstHit = NULL;
 	d_texture = d_volume = NULL;
-	pbo = 999999;
-	cuda_pbo_resource = NULL;
 
 	checkCudaErrors(cudaSetDevice(0));
 	// Otherwise pick the device with highest Gflops/s
+
+
 	/*d_pos = NULL;
 	d_normal = NULL;
 	d_tex = NULL;
@@ -218,13 +221,6 @@ CUDAClass::~CUDAClass()
 	d_texture = d_volume = NULL;
 
 
-	if (pbo != 999999){
-		cudaGraphicsUnregisterResource(cuda_pbo_resource);
-		// delete old buffer
-		glDeleteBuffers(1, &pbo);
-	}
-
-
 	checkCudaErrors(cudaDeviceReset());
 }
 
@@ -232,19 +228,11 @@ CUDAClass::~CUDAClass()
 // Helper function for using CUDA to add vectors in parallel.
 void CUDAClass::cudaRC(/*, unsigned int width, unsigned int height, float h, float4 *d_buffer, float4 *d_lastHit*/)
 {
-	// map PBO to get CUDA device pointer
-	uchar4 *d_output;
-	// map PBO to get CUDA device pointer
-	checkCudaErrors(cudaGraphicsMapResources(1, &cuda_pbo_resource, 0));
-	size_t num_bytes;
-	checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void **)&d_output, &num_bytes, cuda_pbo_resource));
-	
-
 	
 	dim3 blockDim(16, 16, 1);
 	dim3 gridDim((Width + blockDim.x) / blockDim.x, (Height + blockDim.y) / blockDim.y, 1);
 
-	volumeRenderingKernel << < gridDim, blockDim >> >(d_output);
+	volumeRenderingKernel << < gridDim, blockDim >> >();
 
 
 	// Check for any errors launching the kernel
@@ -253,9 +241,6 @@ void CUDAClass::cudaRC(/*, unsigned int width, unsigned int height, float h, flo
 	// cudaDeviceSynchronize waits for the kernel to finish, and returns
 	// any errors encountered during the launch.
 	checkCudaErrors(cudaDeviceSynchronize());
-
-
-	checkCudaErrors(cudaGraphicsUnmapResources(1, &cuda_pbo_resource, 0));
 }
 
 
@@ -274,39 +259,29 @@ void CUDAClass::destroyObject()
 }
 
 
-void CUDAClass::cudaSetVolume(char1 *vol, unsigned int width, unsigned int height, unsigned int depth, float diagonal)
+void CUDAClass::cudaSetVolume(unsigned int width, unsigned int height, unsigned int depth, float diagonal)
 {
-	if (d_volume != NULL)
-	{
-		checkCudaErrors(cudaFree(d_volume));
-		cudaUnbindTexture(volume);
-	}
-	
 	// create 3D array
-	cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<VolumeType>();
-
-	cudaExtent volumeSize = make_cudaExtent(width, height, depth);
-
-	checkCudaErrors(cudaMalloc3DArray(&d_volume, &channelDesc, volumeSize));
-
-	// copy data to 3D array
-	cudaMemcpy3DParms copyParams = { 0 };
-	copyParams.srcPtr = make_cudaPitchedPtr(vol, volumeSize.width*sizeof(VolumeType), volumeSize.width, volumeSize.height);
-	copyParams.dstArray = d_volume;
-	copyParams.extent = volumeSize;
-	copyParams.kind = cudaMemcpyHostToDevice;
-	checkCudaErrors(cudaMemcpy3D(&copyParams));
+	const cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<VolumeType>();
 
 	// set texture parameters
 	volume.normalized = true;                      // access with normalized texture coordinates
 	volume.filterMode = cudaFilterModeLinear;      // linear interpolation
 	volume.addressMode[0] = cudaAddressModeClamp;  // clamp texture coordinates
 	volume.addressMode[1] = cudaAddressModeClamp;
-	//volume.addressMode[2] = cudaAddressModeClamp;
+	volume.addressMode[2] = cudaAddressModeClamp;
 
 	// bind array to 3D texture
-	//cudaBindTextureToArray(volume, d_volume, &channelDesc);
-	checkCudaErrors(cudaBindTextureToArray(volume, d_volume, channelDesc));
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_volume,
+		TextureManager::Inst()->GetID(TEXTURE_VOLUME),
+		GL_TEXTURE_3D, cudaGraphicsMapFlagsReadOnly)); //Register the texture in a resource
+
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_volume, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_volume, cudaResource_volume, 0, 0)); //Get the mapped array
+
+	checkCudaErrors(cudaBindTextureToArray(volume, d_volume, channelDesc)); // Map the array to the surface
+
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_volume, 0)); // Unmap the resource
 	
 
 	//Set the step
@@ -316,24 +291,27 @@ void CUDAClass::cudaSetVolume(char1 *vol, unsigned int width, unsigned int heigh
 
 void CUDAClass::cudaSetTransferFunction(float4 *d_transferFunction, unsigned int width)
 {
+	//Create channel description for 2D texture
+	const cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float4>();
 
-	cudaChannelFormatDesc channelDesc2 = cudaCreateChannelDesc<float4>();
-	if (d_texture == NULL)
-	{
-		
-		checkCudaErrors(cudaMallocArray(&d_texture, &channelDesc2, width, 1));
-		
-	}
-
-	checkCudaErrors(cudaMemcpyToArray(d_texture, 0, 0, d_transferFunction, sizeof(float4) * width, cudaMemcpyHostToDevice));
-
+	// set texture parameters
 	transferFunction.normalized = true;
-	transferFunction.addressMode[0] = cudaAddressModeClamp;
 	transferFunction.filterMode = cudaFilterModeLinear;
-
-	// Bind the array to the texture
-	checkCudaErrors(cudaBindTextureToArray(transferFunction, d_texture, channelDesc2));
+	transferFunction.addressMode[0] = cudaAddressModeClamp;
+	transferFunction.addressMode[1] = cudaAddressModeClamp;
 	
+
+	// bind array to 2D texture
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_TF,
+					TextureManager::Inst()->GetID(TEXTURE_TRANSFER_FUNC),
+					GL_TEXTURE_2D, cudaGraphicsMapFlagsReadOnly)); //Register the texture in a resource
+
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_TF, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_volume, cudaResource_TF, 0, 0)); //Get the mapped array
+
+	checkCudaErrors(cudaBindTextureToArray(transferFunction, d_volume)); // Map the array to the surface
+
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_TF, 0)); // Unmap the resource
 	
 }
 
@@ -345,24 +323,20 @@ void CUDAClass::cudaSetImageSize(unsigned int width, unsigned int height, float 
 	checkCudaErrors(cudaMemcpyToSymbol(constantAngle, &angle, sizeof(float)));
 	checkCudaErrors(cudaMemcpyToSymbol(cosntantNCP, &NCP, sizeof(float)));
 
-
 	Width = width;
 	Height = height;
 
+	// bind array to 2D texture
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_final,
+					TextureManager::Inst()->GetID(TEXTURE_FINAL_IMAGE),
+					GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
 
-	if (pbo != 999999){
-		// unregister this buffer object from CUDA C
-		checkCudaErrors(cudaGraphicsUnregisterResource(cuda_pbo_resource));
-	}
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_final, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_final, cudaResource_final, 0, 0)); //Get the mapped array
 
-	// create pixel buffer object for display
-	if (pbo == 999999) glGenBuffers(1, &pbo);
-	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
-	glBufferData(GL_PIXEL_UNPACK_BUFFER, width*height*sizeof(uchar4), 0, GL_STREAM_DRAW);
-	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+	checkCudaErrors(cudaBindSurfaceToArray(surf, d_final)); // Map the array to the surface
 
-	// register this buffer object with CUDA
-	checkCudaErrors(cudaGraphicsGLRegisterBuffer(&cuda_pbo_resource, pbo, cudaGraphicsMapFlagsWriteDiscard));
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_final, 0)); // Unmap the resource
 
 }
 
@@ -374,13 +348,7 @@ void CUDAClass::cudaUpdateMatrix(const float * matrix){
 
 void CUDAClass::Use(GLenum activeTexture){
 	
-
-	//glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
 	// copy from pbo to texture
-	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
 	glActiveTexture(activeTexture);
 	TextureManager::Inst()->BindTexture(TEXTURE_FINAL_IMAGE);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Width, Height, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 }
