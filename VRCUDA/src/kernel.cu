@@ -183,7 +183,7 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 
 CUDAClass::CUDAClass()
 {
-	d_lastHit = d_FirstHit = NULL;
+	//d_lastHit = d_FirstHit = NULL;
 	d_texture = d_volume = NULL;
 
 	checkCudaErrors(cudaSetDevice(0));
@@ -214,10 +214,10 @@ CUDAClass::~CUDAClass()
 		checkCudaErrors(cudaFreeArray(d_volume));
 		cudaUnbindTexture(volume);
 	}
-	if (d_FirstHit != NULL) checkCudaErrors(cudaFree(d_FirstHit));
-	if (d_lastHit != NULL) checkCudaErrors(cudaFree(d_lastHit));
+	/*if (d_FirstHit != NULL) checkCudaErrors(cudaFree(d_FirstHit));
+	if (d_lastHit != NULL) checkCudaErrors(cudaFree(d_lastHit));*/
 
-	d_lastHit = d_FirstHit = NULL;
+	//d_lastHit = d_FirstHit = NULL;
 	d_texture = d_volume = NULL;
 
 
