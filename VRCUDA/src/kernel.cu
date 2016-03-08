@@ -181,11 +181,11 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 }
 
 
-CUDAClass::CUDAClass()
+CUDAClass::CUDAClass(dim3 dim)
 {
 	//d_lastHit = d_FirstHit = NULL;
 	d_texture = d_volume = NULL;
-
+	block_dim = dim;
 	checkCudaErrors(cudaSetDevice(0));
 	// Otherwise pick the device with highest Gflops/s
 
@@ -228,11 +228,9 @@ CUDAClass::~CUDAClass()
 // Helper function for using CUDA to add vectors in parallel.
 void CUDAClass::cudaRC(/*, unsigned int width, unsigned int height, float h, float4 *d_buffer, float4 *d_lastHit*/)
 {
-	
-	dim3 blockDim(16, 16, 1);
-	dim3 gridDim((Width + blockDim.x) / blockDim.x, (Height + blockDim.y) / blockDim.y, 1);
 
-	volumeRenderingKernel << < gridDim, blockDim >> >();
+
+	volumeRenderingKernel << < grid_dim, block_dim >> >();
 
 
 	// Check for any errors launching the kernel
@@ -289,7 +287,7 @@ void CUDAClass::cudaSetVolume(unsigned int width, unsigned int height, unsigned 
 	checkCudaErrors(cudaMemcpyToSymbol(constantH, &step, sizeof(float)));
 }
 
-void CUDAClass::cudaSetTransferFunction(float4 *d_transferFunction, unsigned int width)
+void CUDAClass::cudaSetTransferFunction(unsigned int width)
 {
 	//Create channel description for 2D texture
 	const cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float4>();
@@ -325,6 +323,9 @@ void CUDAClass::cudaSetImageSize(unsigned int width, unsigned int height, float 
 
 	Width = width;
 	Height = height;
+
+	//Update grid dimension
+	grid_dim = dim3((Width + block_dim.x) / block_dim.x, (Height + block_dim.y) / block_dim.y, 1);
 
 	// bind array to 2D texture
 	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_final,

@@ -32,6 +32,8 @@ namespace glfwFunc
 	char * volume_filepath = "./Raw/volume.raw";
 	char * transfer_func_filepath = NULL;
 	glm::ivec3 vol_size = glm::ivec3(256, 256, 256);
+	glm::ivec2 working_group = glm::ivec2(8, 8);
+	dim3 block_dimension(16, 16, 1);
 
 	//Class to wrap cuda code
 	CUDAClass * cuda;
@@ -253,14 +255,14 @@ namespace glfwFunc
 		printf("Vendor: %s\n", glGetString(GL_VENDOR));
 		printf("Renderer: %s\n", glGetString(GL_RENDERER));
 
-		cuda = new CUDAClass();
+		cuda = new CUDAClass(block_dimension);
 
 
 		//Init the transfer function
 		g_pTransferFunc = new TransferFunction();
 		g_pTransferFunc->InitContext(glfwWindow, &WINDOW_WIDTH, &WINDOW_HEIGHT, transfer_func_filepath, -1, -1);
 
-		cuda->cudaSetTransferFunction((float4 *)g_pTransferFunc->colorPalette, 256);
+		cuda->cudaSetTransferFunction(256);
 
 		
 		// send window size events to AntTweakBar
@@ -302,7 +304,7 @@ namespace glfwFunc
 int main(int argc, char** argv)
 {
 
-	if (argc == 5 || argc == 6) {
+	if (argc == 7 || argc == 8) {
 
 		//Copy volume file path
 		glfwFunc::volume_filepath = new char[strlen(argv[1]) + 1];
@@ -312,16 +314,21 @@ int main(int argc, char** argv)
 		int width = atoi(argv[2]), height = atoi(argv[3]), depth = atoi(argv[4]);
 		glfwFunc::vol_size = glm::ivec3(width, height, depth);
 
+		glfwFunc::block_dimension.x = atoi(argv[5]);
+		glfwFunc::block_dimension.y = atoi(argv[6]);
+
 		//Copy volume transfer function path
-		if (argc == 6){
-			glfwFunc::transfer_func_filepath = new char[strlen(argv[5]) + 1];
-			strncpy_s(glfwFunc::transfer_func_filepath, strlen(argv[5]) + 1, argv[5], strlen(argv[5]));
+		if (argc == 8){
+			glfwFunc::transfer_func_filepath = new char[strlen(argv[7]) + 1];
+			strncpy_s(glfwFunc::transfer_func_filepath, strlen(argv[7]) + 1, argv[7], strlen(argv[7]));
 		}
 
 	}
 	else if (argc > 6) {
 		printf("Too many arguments supplied!!!! \n");
 	}
+
+	
 
 
 	glfwSetErrorCallback(glfwFunc::errorCB);

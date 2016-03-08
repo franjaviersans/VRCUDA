@@ -43,26 +43,26 @@ void check(T err, const char* const func, const char* const file, const int line
 class CUDAClass
 {
 public:
-	CUDAClass();
+	CUDAClass(dim3 dim = dim3(16,16,1));
 	~CUDAClass();
-	int Width, Height;
-	//float4 *d_lastHit, *d_FirstHit;
-	cudaArray *d_volume, *d_texture, *d_final;
-	unsigned int num_vert, num_tri;
-	cudaGraphicsResource_t cudaResource_TF, cudaResource_volume, cudaResource_final; // CUDA Graphics Resource
-
+	
 
 	void destroyObject();
 	void cudaUpdateMatrix(const float * matrix);
 	void cudaRC();
 	void cudaSetVolume(unsigned int width, unsigned int height, unsigned int depth, float diagonal);
 	void cudaSetImageSize(unsigned int width, unsigned int height, float NCP, float angle);
-	void cudaSetTransferFunction(float4 *d_transferFunction, unsigned int width = 256);
+	void cudaSetTransferFunction(unsigned int width = 256);
 	void Use(GLenum activeTexture);
 
 
 private:
-
+	int Width, Height;
+	//float4 *d_lastHit, *d_FirstHit;
+	cudaArray *d_volume, *d_texture, *d_final;
+	unsigned int num_vert, num_tri;
+	cudaGraphicsResource_t cudaResource_TF, cudaResource_volume, cudaResource_final; // CUDA Graphics Resource
+	dim3 block_dim, grid_dim;
 };
 
 #endif
