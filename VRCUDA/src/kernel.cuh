@@ -48,7 +48,9 @@ public:
 	
 
 	void destroyObject();
+#ifndef NOT_RAY_BOX
 	void cudaUpdateMatrix(const float * matrix);
+#endif
 	void cudaRC();
 	void cudaSetVolume(unsigned int width, unsigned int height, unsigned int depth, float diagonal);
 	void cudaSetImageSize(unsigned int width, unsigned int height, float NCP, float angle);
@@ -63,6 +65,11 @@ private:
 	unsigned int num_vert, num_tri;
 	cudaGraphicsResource_t cudaResource_TF, cudaResource_volume, cudaResource_final; // CUDA Graphics Resource
 	dim3 block_dim, grid_dim;
+
+#ifdef NOT_RAY_BOX
+	cudaArray *d_textureFirst, * d_textureLast;
+	cudaGraphicsResource_t cudaResource_First, cudaResource_Last;
+#endif
 };
 
 #endif

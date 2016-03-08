@@ -51,7 +51,9 @@ namespace glfwFunc
 	double lastx, lasty;
 	bool pres = false;
 
+#ifdef NOT_RAY_BOX
 	CCubeIntersection *m_BackInter, *m_FrontInter;
+#endif
 	CFinalImage *m_FinalImage;
 
 
@@ -157,8 +159,10 @@ namespace glfwFunc
 		mProjMatrix = glm::perspective(float(fAngle), ratio, 1.0f, 10.0f);
 
 		// Update size in some buffers!!!
+#ifdef NOT_RAY_BOX
 		m_BackInter->SetResolution(iWidth, iHeight);
 		m_FrontInter->SetResolution(iWidth, iHeight);
+#endif
 		m_FinalImage->SetResolution(iWidth, iHeight);
 		g_pTransferFunc->Resize(&WINDOW_WIDTH, &WINDOW_HEIGHT);
 		
@@ -185,12 +189,14 @@ namespace glfwFunc
 
 		mMVP = mProjMatrix * mModelViewMatrix;
 
+#ifndef NOT_RAY_BOX
 		cuda->cudaUpdateMatrix(glm::value_ptr(glm::transpose(glm::inverse(mModelViewMatrix))));
-
-		/*//Obtain Back hits
+#else
+		//Obtain Back hits
 		m_BackInter->Draw(mMVP);
 		//Obtain the front hits
-		m_FrontInter->Draw(mMVP);*/
+		m_FrontInter->Draw(mMVP);
+#endif
 
 
 		//CUDA volume ray casting
@@ -280,9 +286,10 @@ namespace glfwFunc
 
 		
 
-
+#ifdef NOT_RAY_BOX
 		m_BackInter = new CCubeIntersection(false, WINDOW_WIDTH, WINDOW_HEIGHT);
 		m_FrontInter = new CCubeIntersection(true, WINDOW_WIDTH, WINDOW_HEIGHT);
+#endif
 		m_FinalImage = new CFinalImage(WINDOW_WIDTH, WINDOW_HEIGHT);
 
 
@@ -293,8 +300,10 @@ namespace glfwFunc
 	/// Here all data must be destroyed + glfwTerminate
 	void destroy()
 	{
+#ifdef NOT_RAY_BOX
 		delete m_BackInter;
 		delete g_pTransferFunc;
+#endif
 		TextureManager::Inst()->UnloadAllTextures();
 		glfwTerminate();
 		glfwDestroyWindow(glfwWindow);
