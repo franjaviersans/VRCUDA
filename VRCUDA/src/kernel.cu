@@ -12,20 +12,19 @@ typedef unsigned char VolumeType;
 
 texture<VolumeType, 3, cudaReadModeNormalizedFloat> volume;         // 3D texture
 texture<float4, 2, cudaReadModeElementType>         transferFunction; // 1D transfer function texture
+#ifdef NOT_RAY_BOX
+texture<float4, 2, cudaReadModeElementType>         texFirst, texLast;
+#endif
 surface<void, cudaSurfaceType2D> surf;
 
-/*
-texture<VolumeType, cudaTextureType3D, /*cudaReadModeNormalizedFloat cudaReadModeElementType>	volume;         // 3D texture
-texture<float4, cudaTextureType1D, /*cudaReadModeNormalizedFloat cudaReadModeElementType>	transferFunction; // 1D transfer function texture
-*/
 
-__constant__ float constantH, constantAngle, cosntantNCP;
+
 __constant__ unsigned int constantWidth, constantHeight;
+__constant__ float constantH;
+
+#ifndef NOT_RAY_BOX
+__constant__ float constantAngle, cosntantNCP;
 __constant__ float4x4 c_invViewMatrix;  // inverse view matrix
-
-
-
-
 
 struct Ray
 {
@@ -66,6 +65,8 @@ int intersectBox(Ray r, float *tnear, float *tfar)
 	return smallest_tmax > largest_tmin;
 }
 
+#endif
+
 
 /**
 Kernel to do the volume rendering 
@@ -86,12 +87,10 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 		//Flip the Y axis
 		//Pos.y = constantHeight - Pos.y;
 
-		
+#ifndef NOT_RAY_BOX
 		//ok u and v between -1 and 1
 		float u = (((x + 0.5f) / (float)constantWidth)*2.0f - 1.0f);
 		float v = (((y + 0.5f) / (float)constantHeight)*2.0f - 1.0f);
-
-
 
 		// calculate eye ray in world space
 		Ray eyeRay;
@@ -106,7 +105,8 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 		float tnear, tfar;
 		int hit = intersectBox(eyeRay, &tnear, &tfar);  // this must be wrong....anything else seems to be ok now
 
-		float4 color, bg = make_float4(0.15f); //bg color here
+
+		float4 bg = make_float4(0.15f); //bg color here
 
 		if (hit){
 
@@ -122,21 +122,31 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 
 			//Get direction of the ray
 			float3 direction = last - first;
+			float3 trans = first; 
+#else
+			float4 first = tex2D(texFirst, x, y);
+			float4 last = tex2D(texLast, x, y);
+
+			//Get direction of the ray
+			float3 direction = make_float3(last) - make_float3(first);
+			float3 trans = make_float3(first);
+#endif
 			float D = length(direction);
 			direction = normalize(direction);
 
-			color = make_float4(0.0f);
+			float4 color = make_float4(0.0f);
 			color.w = 1.0f;
 
-			float3 trans = first;
 			float3 rayStep = direction * constantH;
 
 			for (float t = 0; t <= D; t += constantH){
 
 				//Sample in the scalar field and the transfer function
-				//Need to do tri-linear interpolation here
+#ifdef NOT_RAY_BOX
+				float scalar = tex3D(volume, trans.x, trans.y, trans.z);
+#else
 				float scalar = tex3D(volume, trans.x + 0.5f, trans.y + 0.5f, 1.0f - (trans.z + 0.5f)); //convert to texture space
-				//float scalar = tex3D(volume, trans.x, trans.y, trans.z);
+#endif
 				float4 samp = tex2D(transferFunction, scalar, 0.5f);
 				//float scalar = 0.1;
 				//float4 samp = make_float4(0.0f);
@@ -167,6 +177,7 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 			uchar4 ucolor = make_uchar4(color.x * 255, color.y * 255, color.z * 255, color.w * 255);
 			surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp); 
 
+#ifndef NOT_RAY_BOX
 		}else{
 			bg.w = 1.0f;
 
@@ -174,10 +185,8 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 			uchar4 ucolor = make_uchar4(bg.x * 255, bg.y * 255, bg.z * 255, bg.w * 255);
 			surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp);
 		}
-		
+#endif
 	}
-
-	
 }
 
 
@@ -318,8 +327,11 @@ void CUDAClass::cudaSetImageSize(unsigned int width, unsigned int height, float 
 
 	checkCudaErrors(cudaMemcpyToSymbol(constantWidth, &width, sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(constantHeight, &height, sizeof(unsigned int)));
+
+#ifndef NOT_RAY_BOX
 	checkCudaErrors(cudaMemcpyToSymbol(constantAngle, &angle, sizeof(float)));
 	checkCudaErrors(cudaMemcpyToSymbol(cosntantNCP, &NCP, sizeof(float)));
+#endif
 
 	Width = width;
 	Height = height;
@@ -339,13 +351,40 @@ void CUDAClass::cudaSetImageSize(unsigned int width, unsigned int height, float 
 
 	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_final, 0)); // Unmap the resource
 
+
+#ifdef NOT_RAY_BOX
+	// bind array to 2D texture
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_First,
+		TextureManager::Inst()->GetID(TEXTURE_FRONT_HIT),
+		GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
+
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_First, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_textureFirst, cudaResource_First, 0, 0)); //Get the mapped array
+
+	checkCudaErrors(cudaBindTextureToArray(texFirst, d_textureFirst)); // Map the array to the surface
+
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_First, 0)); // Unmap the resource
+
+
+	// bind array to 2D texture
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_Last,
+		TextureManager::Inst()->GetID(TEXTURE_BACK_HIT),
+		GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
+
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_Last, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_textureLast, cudaResource_Last, 0, 0)); //Get the mapped array
+
+	checkCudaErrors(cudaBindTextureToArray(texLast, d_textureLast)); // Map the array to the surface
+
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_Last, 0)); // Unmap the resource
+#endif
 }
 
-
+#ifndef NOT_RAY_BOX
 void CUDAClass::cudaUpdateMatrix(const float * matrix){
 	checkCudaErrors(cudaMemcpyToSymbol(c_invViewMatrix, matrix, sizeof(float4x4)));
 }
-
+#endif
 
 void CUDAClass::Use(GLenum activeTexture){
 	

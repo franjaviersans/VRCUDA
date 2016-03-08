@@ -12,10 +12,10 @@ Volume Rendering application using CUDA with OpenGL
 The program can run without any parameters and will load a volume of size 256x256x256 localted in "./RAW/volume.raw". Some parameters can be passed to the program in the following way: 
 
 ```sh
-$ program <volume_path> <width> <height> <depth> [<transfer_func_path>]
+$ program <volume_path> <width> <height> <depth> <block_width> <block_height> [<transfer_func_path>]
 ```
 
-where **<volume_path>** is the path of the file containing the volume; **<width>, <height>,** and **<depth>** the dimensions of the volume, and **<transfer_function_path>** is the path of the file containing the initial set up of the transfer function. The last parameter is optional, in which case, the identity function is loaded.
+where **<volume_path>** is the path of the file containing the volume; **<width>, <height>,** and **<depth>** the dimensions of the volume; **<block_width>**, and **<block_height>** the number of threads per block and **<transfer_function_path>** is the path of the file containing the initial set up of the transfer function. The last parameter is optional, in which case, the identity function is loaded.
 
 ## Set up of the Transfer Function File#
 
