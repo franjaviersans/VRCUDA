@@ -4,6 +4,9 @@
 // decide if is ray/box intersection or by OpenGL images
 #define NOT_RAY_BOX
 
+// decide to display the results or not
+//#define NOT_DISPLAY
+
 #define BUFFER_OFFSET(i) (reinterpret_cast<void*>(i))
 #define WORLD_COORD_LOCATION	0
 #define COLOR_COORD_LOCATION	1

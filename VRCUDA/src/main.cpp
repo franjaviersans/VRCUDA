@@ -171,6 +171,31 @@ namespace glfwFunc
 		
 	}
 
+	///< Function to warup opencl
+	void WarmUP(unsigned int cycles){
+
+		RotationMat = glm::mat4_cast(glm::normalize(quater));
+
+		mModelViewMatrix = glm::translate(glm::mat4(), glm::vec3(0.0f, 0.0f, -2.0f)) *
+			RotationMat;
+
+		mMVP = mProjMatrix * mModelViewMatrix;
+
+#ifndef NOT_RAY_BOX
+		cuda->cudaUpdateMatrix(glm::value_ptr(glm::transpose(glm::inverse(mModelViewMatrix))));
+#else
+		//Obtain Back hits
+		m_BackInter->Draw(mMVP);
+		//Obtain the front hits
+		m_FrontInter->Draw(mMVP);
+#endif
+
+		for (int i = 0; i < cycles; ++i) {
+			//CUDA volume ray casting
+			cuda->cudaRC();
+		}
+	}
+
 	///< The main rendering function.
 	void draw()
 	{
@@ -350,11 +375,13 @@ int main(int argc, char** argv)
 	}
 
 
-	
-
+#ifndef NOT_DISPLAY
 	glfwMakeContextCurrent(glfwFunc::glfwWindow);
 	if(!glfwFunc::initialize()) exit(EXIT_FAILURE);
 	glfwFunc::resizeCB(glfwFunc::glfwWindow, glfwFunc::WINDOW_WIDTH, glfwFunc::WINDOW_HEIGHT);	//just the 1st time
+
+	//WarmUP!!!!
+	glfwFunc::WarmUP(20);
 
 	// main loop!
 	while (!glfwWindowShouldClose(glfwFunc::glfwWindow))
@@ -368,6 +395,12 @@ int main(int argc, char** argv)
 		glfwFunc::draw();
 		glfwPollEvents();	//or glfwWaitEvents()
 	}
+
+#else
+
+	glfwFunc::WarmUP(300);
+
+#endif
 
 	glfwFunc::destroy();
 	return EXIT_SUCCESS;
