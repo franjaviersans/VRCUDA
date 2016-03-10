@@ -9,6 +9,7 @@
 #include "Volume.h"
 #include "FinalImage.h"
 #include <iostream>
+#include <fstream>
 
 using std::cout;
 using std::endl;
@@ -55,6 +56,15 @@ namespace glfwFunc
 	CCubeIntersection *m_BackInter, *m_FrontInter;
 #endif
 	CFinalImage *m_FinalImage;
+
+#ifdef MEASURE_TIME
+	std::ofstream time_file("Time.txt", std::ios::out);
+	// helper variable
+	LARGE_INTEGER temp;
+	int num;
+	LARGE_INTEGER start_time, end_time;
+	double freq, diff_time;
+#endif
 
 
 	Volume *volume = NULL;
@@ -172,7 +182,7 @@ namespace glfwFunc
 	}
 
 	///< Function to warup opencl
-	void WarmUP(unsigned int cycles){
+	void WarmUP(unsigned int cycles, bool measure = false){
 
 		RotationMat = glm::mat4_cast(glm::normalize(quater));
 
@@ -190,10 +200,28 @@ namespace glfwFunc
 		m_FrontInter->Draw(mMVP);
 #endif
 
+
+#ifdef MEASURE_TIME
+		if (measure){
+			QueryPerformanceCounter((LARGE_INTEGER *)&start_time);	//set start time
+		}
+#endif
+
+
 		for (int i = 0; i < cycles; ++i) {
 			//CUDA volume ray casting
 			cuda->cudaRC();
 		}
+
+#ifdef MEASURE_TIME
+		if (measure){
+			QueryPerformanceCounter((LARGE_INTEGER *)&end_time); //end time
+			diff_time = (float)(((double)end_time.QuadPart - (double)start_time.QuadPart) / freq); // get total time
+			diff_time /= cycles; // get time per cycle
+			time_file << diff_time << endl;
+			time_file.close();
+		}
+#endif
 	}
 
 	///< The main rendering function.
@@ -205,6 +233,10 @@ namespace glfwFunc
 		{
 		  std::cout<<"INICIO "<< err<<std::endl;
 		}
+
+#ifdef MEASURE_TIME
+		QueryPerformanceCounter((LARGE_INTEGER *)&start_time);	//set start time
+#endif
 		
 		RotationMat = glm::mat4_cast(glm::normalize(quater));
 
@@ -251,6 +283,12 @@ namespace glfwFunc
 		g_pTransferFunc->Display();
 
 		glfwSwapBuffers(glfwWindow);
+
+#ifdef MEASURE_TIME
+		QueryPerformanceCounter((LARGE_INTEGER *)&end_time); //end time
+		diff_time += (float)(((double)end_time.QuadPart - (double)start_time.QuadPart) / freq); // get total time
+		++num;
+#endif
 
 		while((err = glGetError()) != GL_NO_ERROR)
 		{
@@ -317,6 +355,13 @@ namespace glfwFunc
 #endif
 		m_FinalImage = new CFinalImage(WINDOW_WIDTH, WINDOW_HEIGHT);
 
+#ifdef MEASURE_TIME
+		// get the tick frequency from the OS
+		QueryPerformanceFrequency((LARGE_INTEGER *)&temp);
+		freq = ((double)temp.QuadPart) / 1000.0; //convert to the time needed
+		num = 0;
+#endif
+
 
 		return true;
 	}
@@ -374,18 +419,23 @@ int main(int argc, char** argv)
 		exit(EXIT_FAILURE);
 	}
 
-
-#ifndef NOT_DISPLAY
 	glfwMakeContextCurrent(glfwFunc::glfwWindow);
-	if(!glfwFunc::initialize()) exit(EXIT_FAILURE);
+	if (!glfwFunc::initialize()) exit(EXIT_FAILURE);
 	glfwFunc::resizeCB(glfwFunc::glfwWindow, glfwFunc::WINDOW_WIDTH, glfwFunc::WINDOW_HEIGHT);	//just the 1st time
 
 	//WarmUP!!!!
 	glfwFunc::WarmUP(20);
 
+
+#ifndef NOT_DISPLAY
 	// main loop!
+#ifndef MEASURE_TIME
 	while (!glfwWindowShouldClose(glfwFunc::glfwWindow))
 	{
+#else
+	while (!glfwWindowShouldClose(glfwFunc::glfwWindow) && glfwFunc::num <= NUM_CYCLES)
+	{
+#endif
 
 		if(glfwFunc::g_pTransferFunc->updateTexture) // Check if the color palette changed    
 		{
@@ -396,9 +446,14 @@ int main(int argc, char** argv)
 		glfwPollEvents();	//or glfwWaitEvents()
 	}
 
+#ifdef MEASURE_TIME
+	glfwFunc::diff_time /= glfwFunc::num; // get time per cycle
+	glfwFunc::time_file << glfwFunc::diff_time << endl;
+	glfwFunc::time_file.close();
+#endif
 #else
 
-	glfwFunc::WarmUP(300);
+	glfwFunc::WarmUP(NUM_CYCLES, true);
 
 #endif
 
