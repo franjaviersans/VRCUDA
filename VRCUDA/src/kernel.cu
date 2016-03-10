@@ -119,6 +119,8 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 
 			float3 first = make_float3(eyeRay.o + eyeRay.d*tnear);
 			float3 last = make_float3(eyeRay.o + eyeRay.d*tfar);
+			first = make_float3(first.x + 0.5f, first.y + 0.5f, 1.0f - (first.z + 0.5f));
+			last = make_float3(last.x + 0.5f, last.y + 0.5f, 1.0f - (last.z + 0.5f));
 
 			//Get direction of the ray
 			float3 direction = last - first;
@@ -145,7 +147,7 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 #ifdef NOT_RAY_BOX
 				float scalar = tex3D(volume, trans.x, trans.y, trans.z);
 #else
-				float scalar = tex3D(volume, trans.x + 0.5f, trans.y + 0.5f, 1.0f - (trans.z + 0.5f)); //convert to texture space
+				float scalar = tex3D(volume, trans.x, trans.y, trans.z); //convert to texture space
 #endif
 				float4 samp = tex2D(transferFunction, scalar, 0.5f);
 				//float scalar = 0.1;
