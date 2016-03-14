@@ -35,6 +35,9 @@ namespace glfwFunc
 	glm::ivec3 vol_size = glm::ivec3(256, 256, 256);
 	glm::ivec2 working_group = glm::ivec2(8, 8);
 	dim3 block_dimension(16, 16, 1);
+	glm::mat4 scale = glm::mat4();
+	bool bits8 = true;
+	int offset = 0;
 
 	//Class to wrap cuda code
 	CUDAClass * cuda;
@@ -187,7 +190,7 @@ namespace glfwFunc
 		RotationMat = glm::mat4_cast(glm::normalize(quater));
 
 		mModelViewMatrix = glm::translate(glm::mat4(), glm::vec3(0.0f, 0.0f, -2.0f)) *
-			RotationMat;
+			RotationMat * scale;
 
 		mMVP = mProjMatrix * mModelViewMatrix;
 
@@ -241,7 +244,7 @@ namespace glfwFunc
 		RotationMat = glm::mat4_cast(glm::normalize(quater));
 
 		mModelViewMatrix =  glm::translate(glm::mat4(), glm::vec3(0.0f,0.0f,-2.0f)) * 
-							RotationMat; 
+							RotationMat * scale; 
 
 
 		mMVP = mProjMatrix * mModelViewMatrix;
@@ -343,7 +346,7 @@ namespace glfwFunc
 
 		//Create volume
 		volume = new Volume();
-		volume->Load(volume_filepath, vol_size.x, vol_size.y, vol_size.z);
+		volume->Load(volume_filepath, vol_size.x, vol_size.y, vol_size.z, bits8, offset);
 
 		cuda->cudaSetVolume(vol_size.x, vol_size.y, vol_size.z, volume->m_fDiagonal);
 
@@ -383,7 +386,25 @@ namespace glfwFunc
 int main(int argc, char** argv)
 {
 
-	if (argc == 7 || argc == 8) {
+#ifdef NOT_RAY_BOX
+	cout << "Using image intersection" << endl;
+#else
+	cout << "Using ray box intersection" << endl;
+#endif
+
+#ifdef NOT_DISPLAY
+	cout << "NOT display" << endl;
+#else
+	cout << "Display result in screen" << endl;
+#endif
+
+#ifdef MEASURE_TIME
+	cout << "Measuring time" <<endl;
+#else
+	cout << "NOT Measuring time" << endl;
+#endif
+
+	if (argc == 12 || argc == 13) {
 
 		//Copy volume file path
 		glfwFunc::volume_filepath = new char[strlen(argv[1]) + 1];
@@ -393,17 +414,28 @@ int main(int argc, char** argv)
 		int width = atoi(argv[2]), height = atoi(argv[3]), depth = atoi(argv[4]);
 		glfwFunc::vol_size = glm::ivec3(width, height, depth);
 
-		glfwFunc::block_dimension.x = atoi(argv[5]);
-		glfwFunc::block_dimension.y = atoi(argv[6]);
+		//number of bits;
+		int bits = atoi(argv[5]);
+		glfwFunc::bits8 = (bits == 8);
+
+		//scale factor of the volume
+		glfwFunc::scale = glm::scale(glm::mat4(), glm::vec3(atof(argv[6]), atof(argv[7]), atof(argv[8])));
+
+		//offset
+		glfwFunc::offset = atoi(argv[9]);
+
+		//working group size
+		glfwFunc::working_group.x = atoi(argv[10]);
+		glfwFunc::working_group.y = atoi(argv[11]);
 
 		//Copy volume transfer function path
-		if (argc == 8){
-			glfwFunc::transfer_func_filepath = new char[strlen(argv[7]) + 1];
-			strncpy_s(glfwFunc::transfer_func_filepath, strlen(argv[7]) + 1, argv[7], strlen(argv[7]));
+		if (argc == 13){
+			glfwFunc::transfer_func_filepath = new char[strlen(argv[12]) + 1];
+			strncpy_s(glfwFunc::transfer_func_filepath, strlen(argv[12]) + 1, argv[12], strlen(argv[12]));
 		}
 
 	}
-	else if (argc > 6) {
+	else if (argc > 13) {
 		printf("Too many arguments supplied!!!! \n");
 	}
 
