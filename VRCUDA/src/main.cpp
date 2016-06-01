@@ -34,7 +34,6 @@ namespace glfwFunc
 	char * volume_filepath = "./Raw/volume.raw";
 	char * transfer_func_filepath = NULL;
 	glm::ivec3 vol_size = glm::ivec3(256, 256, 256);
-	glm::ivec2 working_group = glm::ivec2(8, 8);
 	dim3 block_dimension(16, 16, 1);
 	glm::mat4 scale = glm::mat4();
 	bool bits8 = true;
@@ -189,23 +188,6 @@ namespace glfwFunc
 	///< Function to warup opencl
 	void WarmUP(unsigned int cycles, bool measure = false){
 
-		RotationMat = glm::mat4_cast(glm::normalize(quater));
-
-		mModelViewMatrix = glm::translate(glm::mat4(), glm::vec3(0.0f, 0.0f, -2.0f)) *
-			RotationMat * scale;
-
-		mMVP = mProjMatrix * mModelViewMatrix;
-
-#ifndef NOT_RAY_BOX
-		cuda->cudaUpdateMatrix(glm::value_ptr(glm::transpose(glm::inverse(mModelViewMatrix))));
-#else
-		//Obtain Back hits
-		m_BackInter->Draw(mMVP);
-		//Obtain the front hits
-		m_FrontInter->Draw(mMVP);
-#endif
-
-		glfwSwapBuffers(glfwWindow);
 
 #ifdef MEASURE_TIME
 		if (measure){
@@ -215,8 +197,24 @@ namespace glfwFunc
 
 
 		for (int i = 0; i < cycles; ++i) {
+			RotationMat = glm::mat4_cast(glm::normalize(quater));
+
+			mModelViewMatrix = glm::translate(glm::mat4(), glm::vec3(0.0f, 0.0f, -2.0f)) *
+				RotationMat * scale;
+
+			mMVP = mProjMatrix * mModelViewMatrix;
+
+#ifndef NOT_RAY_BOX
+			cuda->cudaUpdateMatrix(glm::value_ptr(glm::transpose(glm::inverse(mModelViewMatrix))));
+#else
+			//Obtain Back hits
+			m_BackInter->Draw(mMVP);
+			//Obtain the front hits
+			m_FrontInter->Draw(mMVP);
+#endif
 			//CUDA volume ray casting
 			cuda->cudaRC();
+
 		}
 
 #ifdef MEASURE_TIME
@@ -400,8 +398,10 @@ int main(int argc, char** argv)
 		glfwFunc::offset = atoi(argv[9]);
 
 		//working group size
-		glfwFunc::working_group.x = atoi(argv[10]);
-		glfwFunc::working_group.y = atoi(argv[11]);
+		glfwFunc::block_dimension.x = atoi(argv[10]);
+		glfwFunc::block_dimension.y = atoi(argv[11]);
+
+		
 
 		//Copy volume transfer function path
 		if (argc == 13){
