@@ -1,4 +1,5 @@
 #include "TransferFunction.h"
+#include <fstream>
 #include <iostream>
 
 bool operator<(const specialPoint &point1, const specialPoint &point2)
@@ -10,7 +11,7 @@ bool operator<(const specialPoint &point1, const specialPoint &point2)
 }
 
 //Default constructor
-TransferFunction::TransferFunction(void) :imageW(IMAGEWIDHT), imageH(IMAGEHEIGHT), ptsCounter(0), lastPicking(0), dragDrop(false), dragDropColor(false), dragDropPicker(false), indicatorSC(0), pointSelected(1), palleteCreated(false), updateTexture(true)
+TransferFunction::TransferFunction(void) :imageW(IMAGEWIDHT), imageH(IMAGEHEIGHT), ptsCounter(0), lastPicking(0), dragDrop(false), dragDropColor(false), dragDropPicker(false), indicatorSC(0), pointSelected(1), palleteCreated(false), updateTexture(true), dragDropWindow(false)
 {
 	baseColors[0] = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
 	baseColors[1] = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
@@ -28,7 +29,8 @@ TransferFunction::TransferFunction(void) :imageW(IMAGEWIDHT), imageH(IMAGEHEIGHT
 	glActiveTexture(GL_TEXTURE0);
 
 	//Create new empty textures
-	TextureManager::Inst()->CreateTexture1D(TEXTURE_TRANSFER_FUNC, 256, GL_RGBA8, GL_RGBA, GL_FLOAT, GL_NEAREST, GL_NEAREST);
+	TextureManager::Inst()->CreateTexture1D(TEXTURE_TRANSFER_FUNC, 256, GL_RGBA16F, GL_RGBA, GL_FLOAT, GL_NEAREST, GL_NEAREST);
+
 }
 
 //Default constructor
@@ -38,7 +40,7 @@ TransferFunction::~TransferFunction(void)
 
 
 //Function to init context
-void TransferFunction::InitContext(GLFWwindow *window, int *windowsW, int *windowsH, int posx, int posy)
+void TransferFunction::InitContext(GLFWwindow *window, int *windowsW, int *windowsH, const char * file, int posx, int posy)
 {
 
 	//Load the tetures!!
@@ -92,13 +94,62 @@ void TransferFunction::InitContext(GLFWwindow *window, int *windowsW, int *windo
 
 	Resize(windowsW, windowsH);
 
-	//Set the first points
-	this->MouseButton(MAXW + this->realposx, MINH + this->realposy, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS);
+	bool load = false;
+
+
+	if (file != NULL){
+
+
+		std::ifstream input(file, std::ios::in);
+
+		if (!input.is_open()){
+			std::cout << "Couldn't load transfer function file: " << file << std::endl;
+		}
+		else{
+
+			int N;
+			input >> N;
+
+			for (int i = 0; i < N; ++i){
+				float  s, r, g, b, a;
+				input >> s >> r >> g >> b >> a;
+				this->pointList[this->ptsCounter].x = int((s / 255.0f) * (MAXW - MINW) + MINW);
+				this->pointList[this->ptsCounter].y = int((1.0f - a) * (MAXH - MINH) + MINH);
+				this->colorList[this->ptsCounter] = glm::vec4(r, g, b, a);
+				this->colorPosList[this->ptsCounter] = MINWSC;
+				this->colorPickerPosList[this->ptsCounter] = currentColorPickerPos;
+				++this->ptsCounter;
+			}
+
+			input.close();
+			load = true;
+		}
+
+	}
+
+	if (!load){
+		//Set the first point
+		this->pointList[this->ptsCounter].x = MINW;
+		this->pointList[this->ptsCounter].y = MAXH;
+		this->colorList[this->ptsCounter] = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+		this->colorPosList[this->ptsCounter] = MINWSC;
+		this->colorPickerPosList[this->ptsCounter] = glm::ivec2(MINWPC + 5, MINHPC + 5);
+		++this->ptsCounter;
+
+		//Set the last point
+		this->pointList[this->ptsCounter].x = MAXW;
+		this->pointList[this->ptsCounter].y = MINH;
+		this->colorList[this->ptsCounter] = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+		this->colorPosList[this->ptsCounter] = MINWSC;
+		this->colorPickerPosList[this->ptsCounter] = glm::ivec2(MINWPC + 5, MAXHPC - 5);
+		++this->ptsCounter;
+	}
+
+	SortPoints();
 	this->pointSelected = 0;
-	this->MouseButton(MINWPC + this->realposx, MAXHPC + this->realposy, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS);
-	this->MouseButton(MINW + this->realposx, MAXH + this->realposy, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS);
-	this->MouseButton(MAXW + this->realposx, MINH + this->realposy, GLFW_MOUSE_BUTTON_LEFT, GLFW_RELEASE);
-	this->UpdatePallete();
+	UpdatePallete();
+
+
 
 	//Initiate the GUI invisible
 	isVisible = false;
@@ -112,20 +163,6 @@ void TransferFunction::InitContext(GLFWwindow *window, int *windowsW, int *windo
 	catch (GLSLProgramException & e) {
 		std::cerr << e.what() << std::endl;
 		exit(EXIT_FAILURE);
-	}
-	m_program.use();
-	{
-		/*m_program.addAttribute("vVertexCoord");
-		m_program.addAttribute("vTextureCoord");
-		m_program.addUniform("vColor1");
-		m_program.addUniform("vColor2");
-		m_program.addUniform("vColor3");
-		m_program.addUniform("vColor4");
-		m_program.addUniform("tex");
-		m_program.addUniform("Usetexture");
-		m_program.addUniform("Mode");
-		m_program.addUniform("mProjection");
-		m_program.addUniform("mModelView");*/
 	}
 }
 
@@ -704,7 +741,7 @@ void TransferFunction::UpdatePallete()
 	for (int point = 1; point < this->ptsCounter; point++)
 	{
 		float dist = float(pointList[point].x - pointList[point - 1].x);
-		int stepsNumber = int(dist / stepSizeBox);
+		int stepsNumber = int(dist / stepSizeBox + 0.5f);
 
 		float floatStepSize = stepSizeBox / dist;
 
@@ -754,4 +791,23 @@ void TransferFunction::Use(GLenum activeTexture)
 void TransferFunction::Debug()
 {
 
+}
+
+/**
+* Function to save to a file the transfer function
+*/
+void TransferFunction::SaveToFile(std::string filename)
+{
+	std::ofstream out(filename, std::ios::out);
+	out << this->ptsCounter << std::endl;
+	for (int point = 0; point < this->ptsCounter; point++)
+	{
+		int s = int((this->pointList[point].x - MINW) / float(MAXW - MINW)  * 255.0f);
+		out << s << " " <<
+			colorList[point].r << " " <<
+			colorList[point].g << " " <<
+			colorList[point].b << " " <<
+			colorList[point].a << std::endl;
+	}
+	out.close();
 }

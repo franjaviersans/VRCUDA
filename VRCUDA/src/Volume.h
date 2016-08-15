@@ -23,6 +23,8 @@ class Volume
 	public:
 
 		float m_fDiagonal, m_fWidht, m_fHeigth, m_fDepth;
+
+		char * volume;
 		
 
 		///Default constructor
@@ -35,7 +37,7 @@ class Volume
 		void Init();
 
 		///
-		void Load(std::string , GLuint , GLuint , GLuint );
+		void Load(std::string, GLuint, GLuint, GLuint, GLboolean, GLuint);
 
 		///
 		void Use(GLenum );

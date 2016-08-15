@@ -223,16 +223,16 @@ void TextureManager::CreateTexture1D( const unsigned int texID, GLuint size,
 
 
 ///Create an empty texture
-void TextureManager::CreateTexture3D( const unsigned int texID, GLuint width, GLuint Height, GLuint Depth, 
-							GLint internalFormat, GLenum pixelFormat, GLenum pixelType,
-							GLint minFilter, GLint magFilter,
-							GLvoid* data)
+void TextureManager::CreateTexture3D(const unsigned int texID, GLuint width, GLuint Height, GLuint Depth,
+	GLint internalFormat, GLenum pixelFormat, GLenum pixelType,
+	GLint minFilter, GLint magFilter,
+	GLvoid* data)
 {
 	//OpenGL's image ID to map to
 	GLuint gl_texID;
 
 	//if this texture ID is in use, unload the current texture
-	if(m_texID.find(texID) != m_texID.end())
+	if (m_texID.find(texID) != m_texID.end())
 		glDeleteTextures(1, &(m_texID[texID].id));
 
 	//generate an OpenGL texture ID for this texture
@@ -244,12 +244,12 @@ void TextureManager::CreateTexture3D( const unsigned int texID, GLuint width, GL
 	glBindTexture(GL_TEXTURE_3D, gl_texID);
 	//store the texture data for OpenGL use
 
-	glTexImage3D(GL_TEXTURE_3D, 0, internalFormat, width, Height, Depth, 0, pixelFormat, GL_UNSIGNED_BYTE, data);
+	glTexImage3D(GL_TEXTURE_3D, 0, internalFormat, width, Height, Depth, 0, pixelFormat, pixelType, data);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP);
-	glTexParameteri(GL_TEXTURE_3D,GL_TEXTURE_MAG_FILTER,magFilter);
-	glTexParameteri(GL_TEXTURE_3D,GL_TEXTURE_MIN_FILTER,minFilter);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, magFilter);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, minFilter);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_BASE_LEVEL, 0);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, 0);
 }

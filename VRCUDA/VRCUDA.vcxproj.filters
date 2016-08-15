@@ -39,6 +39,12 @@
     <ClCompile Include="src\Volume.cpp">
       <Filter>Sources Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\helper_math.h">
+      <Filter>Sources Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Timer.cpp">
+      <Filter>Sources Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CubeIntersection.h">
@@ -68,10 +74,36 @@
     <ClInclude Include="src\Volume.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\kernel.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Timer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="src\kernel.cu">
       <Filter>Sources Files</Filter>
     </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\hit.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\hit.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\textureQuad.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\textureQuad.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\TransferFunction.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\TransferFunction.vert">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -1,137 +1,396 @@
 
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
 
-#include <stdio.h>
 
-// Launch a kernel on the GPU with one thread for each element.
-	//
-__global__ void addKernel(int *c, const int *a, const int *b)
+#include "kernel.cuh"
+
+typedef unsigned char VolumeType;
+
+#define checkCudaErrors(val) check( (val), #val, __FILE__, __LINE__)
+
+#define opacityThreshold 0.99
+
+
+texture<VolumeType, 3, cudaReadModeNormalizedFloat> volume;         // 3D texture
+texture<float4, 2, cudaReadModeElementType>         transferFunction; // 1D transfer function texture
+#ifdef NOT_RAY_BOX
+texture<float4, 2, cudaReadModeElementType>         texFirst, texLast;
+#endif
+surface<void, cudaSurfaceType2D> surf;
+
+
+
+__constant__ unsigned int constantWidth, constantHeight;
+__constant__ float constantH;
+
+#ifndef NOT_RAY_BOX
+__constant__ float constantAngle, cosntantNCP;
+__constant__ float4x4 c_invViewMatrix;  // inverse view matrix
+
+struct Ray
 {
-    int i = threadIdx.x;
-    c[i] = a[i] + b[i];
+	float4 o;   // origin
+	float4 d;   // direction
+};
+
+// intersect ray with a box
+// http://www.siggraph.org/education/materials/HyperGraph/raytrace/rtinter3.htm
+
+__device__
+int intersectBox(Ray r, float *tnear, float *tfar)
+{
+	float3 boxmin = make_float3(-.5f, -.5f, -.5f);
+	float3 boxmax = make_float3(.5f, .5f, .5f);
+	/*float3 boxmin = make_float3(-1.f, -1.f, -1.f);
+	float3 boxmax = make_float3(1.f, 1.f, 1.f);*/
+	// compute intersection of ray with all six bbox planes
+	float3 invR = make_float3(1.0f) / make_float3(r.d);
+	float3 tbot = invR * (boxmin - make_float3(r.o));
+	float3 ttop = invR * (boxmax - make_float3(r.o));
+
+	// re-order intersections to find smallest and largest on each axis
+
+	float3 tmin = make_float3(FLT_MAX);
+	float3 tmax = make_float3(0.0f);
+
+	tmin = fminf(tmin, fminf(ttop, tbot));
+	tmax = fmaxf(tmax, fmaxf(ttop, tbot));
+
+	// find the largest tmin and the smallest tmax
+	float largest_tmin = fmaxf(fmaxf(tmin.x, tmin.y), fmaxf(tmin.x, tmin.z));
+	float smallest_tmax = fminf(fminf(tmax.x, tmax.y), fminf(tmax.x, tmax.z));
+
+	*tnear = largest_tmin;
+	*tfar = smallest_tmax;
+
+	return smallest_tmax > largest_tmin;
+}
+
+#endif
+
+
+/**
+Kernel to do the volume rendering 
+*/
+__global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const int height, float3 * firsHit, float3 * lastHit*/){
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+	
+
+	if (x < constantWidth && y < constantHeight){
+		/*float sample = tex3D(volume, float(x) / constantWidth, float(y) / constantHeight, 0.5f);
+		float4 color = tex1D(transferFunction, sample);
+
+		result[tpos] = make_uchar4(color.x * 255, color.y * 255, color.z * 255, 255);*/
+		//result[tpos] = make_uchar4(color.x * 255, color.y * 255, color.z * 255, 255);
+		float2 Pos = make_float2(x, y);
+		
+		//Flip the Y axis
+		//Pos.y = constantHeight - Pos.y;
+
+#ifndef NOT_RAY_BOX
+		//ok u and v between -1 and 1
+		float u = (((x + 0.5f) / (float)constantWidth)*2.0f - 1.0f);
+		float v = (((y + 0.5f) / (float)constantHeight)*2.0f - 1.0f);
+
+		// calculate eye ray in world space
+		Ray eyeRay;
+		float tangent = tan(constantAngle); // angle in radians
+		float ar = (float(constantWidth) / constantHeight);
+		eyeRay.o = multiplication(c_invViewMatrix, make_float4(0.0f, 0.0f, 0.0f, 1.0f));
+		eyeRay.d = normalize(make_float4(u * tangent * ar, v * tangent, -cosntantNCP, 0.0f));
+		eyeRay.d = multiplication(c_invViewMatrix, eyeRay.d);
+		eyeRay.d = normalize(eyeRay.d);
+
+		// find intersection with box
+		float tnear, tfar;
+		int hit = intersectBox(eyeRay, &tnear, &tfar);  // this must be wrong....anything else seems to be ok now
+
+
+		float4 bg = make_float4(0.15f); //bg color here
+
+		if (hit){
+
+			if (tnear < cosntantNCP)
+				tnear = cosntantNCP;     // clamp to near plane
+
+
+			//float3 last = firsHit[tpos];
+			//float3 first = lastHit[tpos];
+
+			float3 first = make_float3(eyeRay.o + eyeRay.d*tnear);
+			float3 last = make_float3(eyeRay.o + eyeRay.d*tfar);
+			first = make_float3(first.x + 0.5f, first.y + 0.5f, 1.0f - (first.z + 0.5f));
+			last = make_float3(last.x + 0.5f, last.y + 0.5f, 1.0f - (last.z + 0.5f));
+
+			//Get direction of the ray
+			float3 direction = last - first;
+			float3 trans = first; 
+#else
+			float4 first = tex2D(texFirst, x, y);
+			float4 last = tex2D(texLast, x, y);
+
+			//Get direction of the ray
+			float3 direction = make_float3(last) - make_float3(first);
+			float3 trans = make_float3(first);
+#endif
+			float D = length(direction);
+			direction = normalize(direction);
+
+			float4 color = make_float4(0.0f);
+			color.w = 1.0f;
+
+			float3 rayStep = direction * constantH;
+
+			for (float t = 0; t <= D; t += constantH){
+
+				//Sample in the scalar field and the transfer function
+#ifdef NOT_RAY_BOX
+				float scalar = tex3D(volume, trans.x, trans.y, trans.z);
+#else
+				float scalar = tex3D(volume, trans.x, trans.y, trans.z); //convert to texture space
+#endif
+				float4 samp = tex2D(transferFunction, scalar, 0.5f);
+				//float scalar = 0.1;
+				//float4 samp = make_float4(0.0f);
+
+				//Calculating alpa
+				samp.w = 1.0f - expf(-0.5 * samp.w);
+
+				//Acumulating color and alpha using under operator 
+				samp.x = samp.x * samp.w;
+				samp.y = samp.y * samp.w;
+				samp.z = samp.z * samp.w;
+
+				color.x += samp.x * color.w;
+				color.y += samp.y * color.w;
+				color.z += samp.z * color.w;
+				color.w *= 1.0f - samp.w;
+
+				//Do early termination of the ray
+				if (1.0f - color.w > opacityThreshold) break;
+
+				//Increment ray step
+				trans += rayStep;
+			}
+
+			color.w = 1.0f - color.w;
+
+			//Write to the texture
+			uchar4 ucolor = make_uchar4(color.x * 255, color.y * 255, color.z * 255, color.w * 255);
+			surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp); 
+
+#ifndef NOT_RAY_BOX
+		}else{
+			bg.w = 1.0f;
+
+			//Write to the texture
+			uchar4 ucolor = make_uchar4(bg.x * 255, bg.y * 255, bg.z * 255, bg.w * 255);
+			surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp);
+		}
+#endif
+	}
 }
 
 
-void kernelwrapper(int *dev_c, const int * dev_a, const int *dev_b, unsigned int size)
+CUDAClass::CUDAClass(dim3 dim)
+{
+	//d_lastHit = d_FirstHit = NULL;
+	d_texture = d_volume = NULL;
+	block_dim = dim;
+	checkCudaErrors(cudaSetDevice(0));
+	// Otherwise pick the device with highest Gflops/s
+
+
+	/*d_pos = NULL;
+	d_normal = NULL;
+	d_tex = NULL;
+	d_id = NULL;
+	d_octree = NULL;
+	d_texture = NULL;
+	d_texW = d_texH = -1;*/
+}
+
+CUDAClass::~CUDAClass()
 {
 
-	addKernel << < 1, size >> >(dev_c, dev_a, dev_b);
+/*	destroyObject();*/
+
+	if (d_texture != NULL)
+	{
+		checkCudaErrors(cudaFreeArray(d_texture));
+		cudaUnbindTexture(transferFunction);
+	}
+	if (d_volume != NULL)
+	{
+		checkCudaErrors(cudaFreeArray(d_volume));
+		cudaUnbindTexture(volume);
+	}
+	/*if (d_FirstHit != NULL) checkCudaErrors(cudaFree(d_FirstHit));
+	if (d_lastHit != NULL) checkCudaErrors(cudaFree(d_lastHit));*/
+
+	//d_lastHit = d_FirstHit = NULL;
+	d_texture = d_volume = NULL;
+
+
+	checkCudaErrors(cudaDeviceReset());
 }
 
 
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
+void CUDAClass::cudaRC(/*, unsigned int width, unsigned int height, float h, float4 *d_buffer, float4 *d_lastHit*/)
 {
-	int *dev_a = 0;
-	int *dev_b = 0;
-	int *dev_c = 0;
-	cudaError_t cudaStatus;
-
-	// Choose which GPU to run on, change this on a multi-GPU system.
-	cudaStatus = cudaSetDevice(0);
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-		goto Error;
-	}
-
-	// Allocate GPU buffers for three vectors (two input, one output)    .
-	cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(int));
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaMalloc failed!");
-		goto Error;
-	}
-
-	cudaStatus = cudaMalloc((void**)&dev_a, size * sizeof(int));
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaMalloc failed!");
-		goto Error;
-	}
-
-	cudaStatus = cudaMalloc((void**)&dev_b, size * sizeof(int));
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaMalloc failed!");
-		goto Error;
-	}
-
-	// Copy input vectors from host memory to GPU buffers.
-	cudaStatus = cudaMemcpy(dev_a, a, size * sizeof(int), cudaMemcpyHostToDevice);
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaMemcpy failed!");
-		goto Error;
-	}
-
-	cudaStatus = cudaMemcpy(dev_b, b, size * sizeof(int), cudaMemcpyHostToDevice);
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaMemcpy failed!");
-		goto Error;
-	}
 
 
+	volumeRenderingKernel << < grid_dim, block_dim >> >();
 
-	addKernel <<< 1, size >>>(dev_c, dev_a, dev_b);
 
 	// Check for any errors launching the kernel
-	cudaStatus = cudaGetLastError();
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-		goto Error;
-	}
+	checkCudaErrors(cudaGetLastError());
 
 	// cudaDeviceSynchronize waits for the kernel to finish, and returns
 	// any errors encountered during the launch.
-	cudaStatus = cudaDeviceSynchronize();
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
-		goto Error;
-	}
-
-	// Copy output vector from GPU buffer to host memory.
-	cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(int), cudaMemcpyDeviceToHost);
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaMemcpy failed!");
-		goto Error;
-	}
-
-Error:
-	cudaFree(dev_c);
-	cudaFree(dev_a);
-	cudaFree(dev_b);
-
-	return cudaStatus;
+	checkCudaErrors(cudaDeviceSynchronize());
 }
 
 
-int CUDAmain(){
-
-	const int arraySize = 5;
-	const int a[arraySize] = { 1, 2, 3, 4, 5 };
-	const int b[arraySize] = { 10, 20, 30, 40, 50 };
-	int c[arraySize] = { 0 };
-
-	// Add vectors in parallel.
-	cudaError_t cudaStatus = addWithCuda(c, a, b, arraySize);
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "addWithCuda failed!");
-		return 1;
-	}
-
-	printf("{1,2,3,4,5} + {10,20,30,40,50} = {%d,%d,%d,%d,%d}\n",
-		c[0], c[1], c[2], c[3], c[4]);
-
-	// cudaDeviceReset must be called before exiting in order for profiling and
-	// tracing tools such as Nsight and Visual Profiler to show complete traces.
-	cudaStatus = cudaDeviceReset();
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaDeviceReset failed!");
-		return 1;
-	}
-
-
-	return 0;
-
-
+void CUDAClass::destroyObject()
+{
+	/*if (d_pos != NULL) checkCudaErrors(cudaFree(d_pos));
+	if (d_normal != NULL) checkCudaErrors(cudaFree(d_normal));
+	if (d_tex != NULL) checkCudaErrors(cudaFree(d_tex));
+	if (d_id != NULL) checkCudaErrors(cudaFree(d_id));
+	if (d_octree != NULL) checkCudaErrors(cudaFree(d_octree));
+	d_pos = NULL;
+	d_normal = NULL;
+	d_tex = NULL;
+	d_id = NULL;
+	d_octree = NULL;*/
 }
 
 
+void CUDAClass::cudaSetVolume(unsigned int width, unsigned int height, unsigned int depth, float diagonal)
+{
+	// create 3D array
+	const cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<VolumeType>();
 
+	// set texture parameters
+	volume.normalized = true;                      // access with normalized texture coordinates
+	volume.filterMode = cudaFilterModeLinear;      // linear interpolation
+	volume.addressMode[0] = cudaAddressModeClamp;  // clamp texture coordinates
+	volume.addressMode[1] = cudaAddressModeClamp;
+	volume.addressMode[2] = cudaAddressModeClamp;
+
+	// bind array to 3D texture
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_volume,
+		TextureManager::Inst()->GetID(TEXTURE_VOLUME),
+		GL_TEXTURE_3D, cudaGraphicsMapFlagsReadOnly)); //Register the texture in a resource
+
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_volume, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_volume, cudaResource_volume, 0, 0)); //Get the mapped array
+
+	checkCudaErrors(cudaBindTextureToArray(volume, d_volume, channelDesc)); // Map the array to the surface
+
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_volume, 0)); // Unmap the resource
+	
+
+	//Set the step
+	float step = 1.f / diagonal;
+	checkCudaErrors(cudaMemcpyToSymbol(constantH, &step, sizeof(float)));
+}
+
+void CUDAClass::cudaSetTransferFunction(unsigned int width)
+{
+	//Create channel description for 2D texture
+	const cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float4>();
+
+	// set texture parameters
+	transferFunction.normalized = true;
+	transferFunction.filterMode = cudaFilterModeLinear;
+	transferFunction.addressMode[0] = cudaAddressModeClamp;
+	transferFunction.addressMode[1] = cudaAddressModeClamp;
+	
+
+	// bind array to 2D texture
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_TF,
+					TextureManager::Inst()->GetID(TEXTURE_TRANSFER_FUNC),
+					GL_TEXTURE_2D, cudaGraphicsMapFlagsReadOnly)); //Register the texture in a resource
+
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_TF, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_volume, cudaResource_TF, 0, 0)); //Get the mapped array
+
+	checkCudaErrors(cudaBindTextureToArray(transferFunction, d_volume)); // Map the array to the surface
+
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_TF, 0)); // Unmap the resource
+	
+}
+
+
+void CUDAClass::cudaSetImageSize(unsigned int width, unsigned int height, float NCP, float angle){
+
+	checkCudaErrors(cudaMemcpyToSymbol(constantWidth, &width, sizeof(unsigned int)));
+	checkCudaErrors(cudaMemcpyToSymbol(constantHeight, &height, sizeof(unsigned int)));
+
+#ifndef NOT_RAY_BOX
+	checkCudaErrors(cudaMemcpyToSymbol(constantAngle, &angle, sizeof(float)));
+	checkCudaErrors(cudaMemcpyToSymbol(cosntantNCP, &NCP, sizeof(float)));
+#endif
+
+	Width = width;
+	Height = height;
+
+	//Update grid dimension
+	grid_dim = dim3((Width + block_dim.x) / block_dim.x, (Height + block_dim.y) / block_dim.y, 1);
+
+	// bind array to 2D texture
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_final,
+					TextureManager::Inst()->GetID(TEXTURE_FINAL_IMAGE),
+					GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
+
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_final, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_final, cudaResource_final, 0, 0)); //Get the mapped array
+
+	checkCudaErrors(cudaBindSurfaceToArray(surf, d_final)); // Map the array to the surface
+
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_final, 0)); // Unmap the resource
+
+
+#ifdef NOT_RAY_BOX
+	// bind array to 2D texture
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_First,
+		TextureManager::Inst()->GetID(TEXTURE_FRONT_HIT),
+		GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
+
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_First, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_textureFirst, cudaResource_First, 0, 0)); //Get the mapped array
+
+	checkCudaErrors(cudaBindTextureToArray(texFirst, d_textureFirst)); // Map the array to the surface
+
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_First, 0)); // Unmap the resource
+
+
+	// bind array to 2D texture
+	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_Last,
+		TextureManager::Inst()->GetID(TEXTURE_BACK_HIT),
+		GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
+
+	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_Last, 0)); // Map the resource
+	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_textureLast, cudaResource_Last, 0, 0)); //Get the mapped array
+
+	checkCudaErrors(cudaBindTextureToArray(texLast, d_textureLast)); // Map the array to the surface
+
+	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_Last, 0)); // Unmap the resource
+#endif
+}
+
+#ifndef NOT_RAY_BOX
+void CUDAClass::cudaUpdateMatrix(const float * matrix){
+	checkCudaErrors(cudaMemcpyToSymbol(c_invViewMatrix, matrix, sizeof(float4x4)));
+}
+#endif
+
+void CUDAClass::Use(GLenum activeTexture){
+	
+	// copy from pbo to texture
+	glActiveTexture(activeTexture);
+	TextureManager::Inst()->BindTexture(TEXTURE_FINAL_IMAGE);
+}
