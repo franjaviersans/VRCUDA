@@ -1,6 +1,6 @@
 # README #
 
-Volume Rendering application using CUDA with OpenGL
+Volume Rendering application using CUDA 7.5 with OpenGL in Visual Studio 2013
 
 ## Project Configuration ##
 - Need GLFW, FreeImage, GLM, and GLEW. 
