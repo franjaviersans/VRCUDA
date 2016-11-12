@@ -2,8 +2,6 @@
 #define KERNELGPU_H
 
 
-
-#include "../include/GL/glew.h"
 #include "Definitions.h"
 #include "TextureManager.h"
 

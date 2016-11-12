@@ -45,6 +45,7 @@
     <ClCompile Include="src\Timer.cpp">
       <Filter>Sources Files</Filter>
     </ClCompile>
+    <ClCompile Include="include\glad\glad.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CubeIntersection.h">
