@@ -69,12 +69,12 @@ int intersectBox(Ray r, float *tnear, float *tfar)
 
 
 /**
-Kernel to do the volume rendering 
+Kernel to do the volume rendering
 */
 __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const int height, float3 * firsHit, float3 * lastHit*/){
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-	
+
 
 	if (x < constantWidth && y < constantHeight){
 		/*float sample = tex3D(volume, float(x) / constantWidth, float(y) / constantHeight, 0.5f);
@@ -83,7 +83,7 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 		result[tpos] = make_uchar4(color.x * 255, color.y * 255, color.z * 255, 255);*/
 		//result[tpos] = make_uchar4(color.x * 255, color.y * 255, color.z * 255, 255);
 		float2 Pos = make_float2(x, y);
-		
+
 		//Flip the Y axis
 		//Pos.y = constantHeight - Pos.y;
 
@@ -124,69 +124,70 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 
 			//Get direction of the ray
 			float3 direction = last - first;
-			float3 trans = first; 
+			float3 trans = first;
 #else
-			float4 first = tex2D(texFirst, x, y);
-			float4 last = tex2D(texLast, x, y);
+		float4 first = tex2D(texFirst, x, y);
+		float4 last = tex2D(texLast, x, y);
 
-			//Get direction of the ray
-			float3 direction = make_float3(last) - make_float3(first);
-			float3 trans = make_float3(first);
+		//Get direction of the ray
+		float3 direction = make_float3(last) - make_float3(first);
+		float3 trans = make_float3(first);
 #endif
-			float D = length(direction);
-			direction = normalize(direction);
+		float D = length(direction);
+		direction = normalize(direction);
 
-			float4 color = make_float4(0.0f);
-			color.w = 1.0f;
+		float4 color = make_float4(0.0f);
+		color.w = 1.0f;
 
-			float3 rayStep = direction * constantH;
+		float3 rayStep = direction * constantH;
 
-			for (float t = 0; t <= D; t += constantH){
+		for (float t = 0; t <= D; t += constantH){
 
-				//Sample in the scalar field and the transfer function
+			//Sample in the scalar field and the transfer function
 #ifdef NOT_RAY_BOX
-				float scalar = tex3D(volume, trans.x, trans.y, trans.z);
+			float scalar = tex3D(volume, trans.x, trans.y, trans.z);
 #else
-				float scalar = tex3D(volume, trans.x, trans.y, trans.z); //convert to texture space
+			float scalar = tex3D(volume, trans.x, trans.y, trans.z); //convert to texture space
 #endif
-				float4 samp = tex2D(transferFunction, scalar, 0.5f);
-				//float scalar = 0.1;
-				//float4 samp = make_float4(0.0f);
+			float4 samp = tex2D(transferFunction, scalar, 0.5f);
+			//float scalar = 0.1;
+			//float4 samp = make_float4(0.0f);
 
-				//Calculating alpa
-				samp.w = 1.0f - expf(-0.5 * samp.w);
+			//Calculating alpa
+			samp.w = 1.0f - expf(-0.5 * samp.w);
 
-				//Acumulating color and alpha using under operator 
-				samp.x = samp.x * samp.w;
-				samp.y = samp.y * samp.w;
-				samp.z = samp.z * samp.w;
+			//Acumulating color and alpha using under operator 
+			samp.x = samp.x * samp.w;
+			samp.y = samp.y * samp.w;
+			samp.z = samp.z * samp.w;
 
-				color.x += samp.x * color.w;
-				color.y += samp.y * color.w;
-				color.z += samp.z * color.w;
-				color.w *= 1.0f - samp.w;
+			color.x += samp.x * color.w;
+			color.y += samp.y * color.w;
+			color.z += samp.z * color.w;
+			color.w *= 1.0f - samp.w;
 
-				//Do early termination of the ray
-				if (1.0f - color.w > opacityThreshold) break;
+			//Do early termination of the ray
+			if (1.0f - color.w > opacityThreshold) break;
 
-				//Increment ray step
-				trans += rayStep;
-			}
+			//Increment ray step
+			trans += rayStep;
+		}
 
-			color.w = 1.0f - color.w;
+		color.w = 1.0f - color.w;
 
-			//Write to the texture
-			uchar4 ucolor = make_uchar4(color.x * 255, color.y * 255, color.z * 255, color.w * 255);
-			surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp); 
+		//Write to the texture
+		uchar4 ucolor = make_uchar4(color.x * 255, color.y * 255, color.z * 255, color.w * 255);
+		surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp);
 
 #ifndef NOT_RAY_BOX
-		}else{
-			bg.w = 1.0f;
-
-			//Write to the texture
-			uchar4 ucolor = make_uchar4(bg.x * 255, bg.y * 255, bg.z * 255, bg.w * 255);
-			surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp);
 		}
+	else{
+		bg.w = 1.0f;
+
+		//Write to the texture
+		uchar4 ucolor = make_uchar4(bg.x * 255, bg.y * 255, bg.z * 255, bg.w * 255);
+		surf2Dwrite(ucolor, surf, x * sizeof(uchar4), y, cudaBoundaryModeClamp);
+	}
 #endif
 	}
 }
@@ -213,7 +214,7 @@ CUDAClass::CUDAClass(dim3 dim)
 CUDAClass::~CUDAClass()
 {
 
-/*	destroyObject();*/
+	/*	destroyObject();*/
 
 	if (d_texture != NULL)
 	{
@@ -282,7 +283,7 @@ void CUDAClass::cudaSetVolume(unsigned int width, unsigned int height, unsigned 
 
 	// bind array to 3D texture
 	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_volume,
-		TextureManager::Inst()->GetID(TEXTURE_VOLUME),
+		TextureManager::Inst().GetID(TEXTURE_VOLUME),
 		GL_TEXTURE_3D, cudaGraphicsMapFlagsReadOnly)); //Register the texture in a resource
 
 	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_volume, 0)); // Map the resource
@@ -291,7 +292,7 @@ void CUDAClass::cudaSetVolume(unsigned int width, unsigned int height, unsigned 
 	checkCudaErrors(cudaBindTextureToArray(volume, d_volume, channelDesc)); // Map the array to the surface
 
 	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_volume, 0)); // Unmap the resource
-	
+
 
 	//Set the step
 	float step = 1.f / diagonal;
@@ -308,12 +309,12 @@ void CUDAClass::cudaSetTransferFunction(unsigned int width)
 	transferFunction.filterMode = cudaFilterModeLinear;
 	transferFunction.addressMode[0] = cudaAddressModeClamp;
 	transferFunction.addressMode[1] = cudaAddressModeClamp;
-	
+
 
 	// bind array to 2D texture
 	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_TF,
-					TextureManager::Inst()->GetID(TEXTURE_TRANSFER_FUNC),
-					GL_TEXTURE_2D, cudaGraphicsMapFlagsReadOnly)); //Register the texture in a resource
+		TextureManager::Inst().GetID(TEXTURE_TRANSFER_FUNC),
+		GL_TEXTURE_2D, cudaGraphicsMapFlagsReadOnly)); //Register the texture in a resource
 
 	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_TF, 0)); // Map the resource
 	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_volume, cudaResource_TF, 0, 0)); //Get the mapped array
@@ -321,7 +322,7 @@ void CUDAClass::cudaSetTransferFunction(unsigned int width)
 	checkCudaErrors(cudaBindTextureToArray(transferFunction, d_volume)); // Map the array to the surface
 
 	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_TF, 0)); // Unmap the resource
-	
+
 }
 
 
@@ -343,8 +344,8 @@ void CUDAClass::cudaSetImageSize(unsigned int width, unsigned int height, float 
 
 	// bind array to 2D texture
 	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_final,
-					TextureManager::Inst()->GetID(TEXTURE_FINAL_IMAGE),
-					GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
+		TextureManager::Inst().GetID(TEXTURE_FINAL_IMAGE),
+		GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
 
 	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_final, 0)); // Map the resource
 	checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&d_final, cudaResource_final, 0, 0)); //Get the mapped array
@@ -389,8 +390,8 @@ void CUDAClass::cudaUpdateMatrix(const float * matrix){
 #endif
 
 void CUDAClass::Use(GLenum activeTexture){
-	
+
 	// copy from pbo to texture
 	glActiveTexture(activeTexture);
-	TextureManager::Inst()->BindTexture(TEXTURE_FINAL_IMAGE);
+	TextureManager::Inst().BindTexture(TEXTURE_FINAL_IMAGE);
 }

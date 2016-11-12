@@ -15,12 +15,6 @@
     <ClCompile Include="src\CubeIntersection.cpp">
       <Filter>Sources Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\FBOCube.cpp">
-      <Filter>Sources Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\FBOQuad.cpp">
-      <Filter>Sources Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\FinalImage.cpp">
       <Filter>Sources Files</Filter>
     </ClCompile>
@@ -39,25 +33,27 @@
     <ClCompile Include="src\Volume.cpp">
       <Filter>Sources Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\helper_math.h">
-      <Filter>Sources Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\Timer.cpp">
       <Filter>Sources Files</Filter>
     </ClCompile>
-    <ClCompile Include="include\glad\glad.c" />
+    <ClCompile Include="include\glad\glad.c">
+      <Filter>Sources Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\VBOCube.cpp">
+      <Filter>Sources Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\VBOQuad.cpp">
+      <Filter>Sources Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\helper_math.h">
+      <Filter>Header Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CubeIntersection.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Definitions.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\FBOCube.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\FBOQuad.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\FinalImage.h">
@@ -80,6 +76,12 @@
     </ClInclude>
     <ClInclude Include="src\Timer.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VBOCube.h">
+      <Filter>Sources Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VBOQuad.h">
+      <Filter>Sources Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
