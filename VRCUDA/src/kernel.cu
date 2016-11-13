@@ -22,10 +22,11 @@ surface<void, cudaSurfaceType2D> surf;
 __constant__ unsigned int constantWidth, constantHeight;
 __constant__ float constantH;
 
+#ifdef LIGHTING
 __constant__ float3 c_diffColor;
 __constant__ float3 c_lightDir;
 __constant__ float3 c_voxelJump;
-
+#endif
 
 #ifndef NOT_RAY_BOX
 __constant__ float constantAngle, cosntantNCP;
