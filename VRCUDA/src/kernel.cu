@@ -22,6 +22,11 @@ surface<void, cudaSurfaceType2D> surf;
 __constant__ unsigned int constantWidth, constantHeight;
 __constant__ float constantH;
 
+__constant__ float3 c_diffColor;
+__constant__ float3 c_lightDir;
+__constant__ float3 c_voxelJump;
+
+
 #ifndef NOT_RAY_BOX
 __constant__ float constantAngle, cosntantNCP;
 __constant__ float4x4 c_invViewMatrix;  // inverse view matrix
@@ -161,6 +166,26 @@ __global__ void volumeRenderingKernel(/*uchar4 * result, const int width, const 
 			samp.y = samp.y * samp.w;
 			samp.z = samp.z * samp.w;
 
+			//calculate lighting for the sample color
+#ifdef LIGHTING
+
+			// sample neightbours
+			float3 normal;
+			//sample right
+			normal.x = tex3D(volume, trans.x + c_voxelJump.x, trans.y, trans.z) - scalar;
+			normal.y = tex3D(volume, trans.x, trans.y + c_voxelJump.y, trans.z) - scalar;
+			normal.z = tex3D(volume, trans.x, trans.y, trans.z - c_voxelJump.z) - scalar;
+
+			//normalize normal
+			normal = normalize(normal);
+
+			float d = max(dot(c_lightDir, normal), 0.0f);
+
+			samp.x = samp.x * d * c_diffColor.x;
+			samp.y = samp.y * d * c_diffColor.y;
+			samp.z = samp.z * d * c_diffColor.z;
+#endif
+
 			color.x += samp.x * color.w;
 			color.y += samp.y * color.w;
 			color.z += samp.z * color.w;
@@ -209,6 +234,13 @@ CUDAClass::CUDAClass(dim3 dim)
 	d_octree = NULL;
 	d_texture = NULL;
 	d_texW = d_texH = -1;*/
+
+#ifdef LIGHTING
+	glm::vec3 diffColor = glm::vec3(1.0, 0.0, 1.0f);
+	checkCudaErrors(cudaMemcpyToSymbol(c_diffColor, glm::value_ptr(diffColor), sizeof(float3)));
+#endif
+
+
 }
 
 CUDAClass::~CUDAClass()
@@ -358,7 +390,7 @@ void CUDAClass::cudaSetImageSize(unsigned int width, unsigned int height, float 
 #ifdef NOT_RAY_BOX
 	// bind array to 2D texture
 	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_First,
-		TextureManager::Inst()->GetID(TEXTURE_FRONT_HIT),
+		TextureManager::Inst().GetID(TEXTURE_FRONT_HIT),
 		GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
 
 	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_First, 0)); // Map the resource
@@ -371,7 +403,7 @@ void CUDAClass::cudaSetImageSize(unsigned int width, unsigned int height, float 
 
 	// bind array to 2D texture
 	checkCudaErrors(cudaGraphicsGLRegisterImage(&cudaResource_Last,
-		TextureManager::Inst()->GetID(TEXTURE_BACK_HIT),
+		TextureManager::Inst().GetID(TEXTURE_BACK_HIT),
 		GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //Register the texture in a resource
 
 	checkCudaErrors(cudaGraphicsMapResources(1, &cudaResource_Last, 0)); // Map the resource
@@ -382,6 +414,17 @@ void CUDAClass::cudaSetImageSize(unsigned int width, unsigned int height, float 
 	checkCudaErrors(cudaGraphicsUnmapResources(1, &cudaResource_Last, 0)); // Unmap the resource
 #endif
 }
+
+
+#ifdef LIGHTING
+void CUDAClass::cudaUpdateLight(const float * lightDir){
+	checkCudaErrors(cudaMemcpyToSymbol(c_lightDir, lightDir, sizeof(float3)));
+}
+
+void CUDAClass::cudaUpdateVoxelSize(const float * voxelJump){
+	checkCudaErrors(cudaMemcpyToSymbol(c_voxelJump, voxelJump, sizeof(float3)));
+}
+#endif
 
 #ifndef NOT_RAY_BOX
 void CUDAClass::cudaUpdateMatrix(const float * matrix){

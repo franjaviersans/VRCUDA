@@ -49,6 +49,10 @@ public:
 #ifndef NOT_RAY_BOX
 	void cudaUpdateMatrix(const float * matrix);
 #endif
+#ifdef LIGHTING
+	void cudaUpdateLight(const float * lightDir);
+	void cudaUpdateVoxelSize(const float * voxelJump);
+#endif
 	void cudaRC();
 	void cudaSetVolume(unsigned int width, unsigned int height, unsigned int depth, float diagonal);
 	void cudaSetImageSize(unsigned int width, unsigned int height, float NCP, float angle);
