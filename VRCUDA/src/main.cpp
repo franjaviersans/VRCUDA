@@ -32,13 +32,10 @@ namespace glfwFunc
 	TransferFunction *g_pTransferFunc;
 
 
-	char * volume_filepath = "../.././Raw/nucleon_8_41_41_41.raw";
-	char * transfer_func_filepath = NULL;
-	glm::ivec3 vol_size = glm::ivec3(41, 41, 41);
-	/*
+	
 	char * volume_filepath = "./Raw/volume.raw";
 	char * transfer_func_filepath = NULL;
-	glm::ivec3 vol_size = glm::ivec3(256, 256, 256);*/
+	glm::ivec3 vol_size = glm::ivec3(256, 256, 256);
 	dim3 block_dimension(16, 16, 1);
 	glm::mat4 scale = glm::mat4();
 	bool bits8 = true;
